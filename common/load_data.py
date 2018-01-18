@@ -3,6 +3,9 @@ import numpy as np
 import os
 import glob
 
+import matplotlib.pyplot as plt
+# from matplotlib import cm
+
 from torch.utils.data import Dataset
 from utils.config import config
 
@@ -127,15 +130,23 @@ class LASunnyBrooksMRI(BaseImageDataSet):
         assert index <= self.__len__()
         return self.labels[index]
 
-    def __determine_i_range__(self, perc_low=5, perc_high=95, axis=0):
+    def __get_img_flattened__(self, raw_data=False):
 
         all_data = np.empty(0)
         l_data_set = self.__len__()
 
         for idx in np.arange(l_data_set):
-            img = self.images[idx]
+            if raw_data:
+                img = self.images_raw[idx]
+            else:
+                img = self.images[idx]
             all_data = np.append(all_data, np.ravel(img))
 
+        return all_data
+
+    def __determine_i_range__(self, perc_low=5, perc_high=95, axis=0):
+
+        all_data = self.__get_img_flattened__()
         lower, upper = np.percentile(all_data, [perc_low, perc_high], axis=axis)
         del all_data
 
@@ -172,6 +183,26 @@ class LASunnyBrooksMRI(BaseImageDataSet):
                 np.savez(filename, image=image, label=label)
             except IOError:
                 raise IOError("Can't save {}".format(filename))
+
+    def show_histogram(self, raw=False, bins=50):
+
+        all_data = self.__get_img_flattened__()
+        if raw:
+            plots = 2
+        else:
+            plots = 1
+        plt.figure(figsize=(14, 7))
+        plt.subplot(1, plots, 1)
+        plt.hist(all_data, bins=bins)
+        if raw:
+            all_data_raw = self.__get_img_flattened__(raw_data=raw)
+            plt.subplot(1, plots, 2)
+            plt.hist(all_data_raw, bins=bins)
+            del all_data_raw
+        plt.show()
+        plt.close()
+        del all_data
+
 
 
 # dtaset = LASunnyBrooksMRI(config.data_dir, config.dflt_image_name + ".mhd")
