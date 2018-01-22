@@ -144,25 +144,14 @@ class LASunnyBrooksMRI(BaseImageDataSet):
 
         return all_data
 
-    def __determine_i_range__(self, perc_low=5, perc_high=95, axis=0):
+    def normalize_values(self, perc_low=0, perc_high=95, axis=0):
 
-        all_data = self.__get_img_flattened__()
-        lower, upper = np.percentile(all_data, [perc_low, perc_high], axis=axis)
-        del all_data
-
-        return lower, upper
-
-    def normalize_values(self):
-        lower, upper = self.__determine_i_range__()
         self.images_raw = []
         for idx in np.arange(self.__len__()):
             img = self.images[idx]
             # save un-normalized image for comparison
             self.images_raw.append(np.copy(img))
-            if lower is not None:
-                img[img < lower] = lower
-            if upper is not None:
-                img[img > upper] = upper
+            lower, upper = np.percentile(np.ravel(img), [perc_low, perc_high], axis=axis)
             # set new normalized image
             img = (img - lower) * 1./(upper-lower)
             self.images[idx] = img
@@ -204,9 +193,9 @@ class LASunnyBrooksMRI(BaseImageDataSet):
         del all_data
 
 
+# dtaset = LASunnyBrooksMRI(data_dir="/home/jogi/git/repository/dcnn_mri_seg/data/", search_mask=config.dflt_image_name + ".mhd")
+# dtaset.normalize_values(perc_high=95, axis=0)
 
-# dtaset = LASunnyBrooksMRI(config.data_dir, config.dflt_image_name + ".mhd")
-# dtaset.normalize_values()
 # dtaset.save_to_numpy()
 
 

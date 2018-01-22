@@ -1,42 +1,37 @@
 import torch.nn as nn
-import math
+from torch.nn import init
 
 
-def conv3x3(in_planes, out_planes, stride=1, padding=1, dilation=1):
-    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
-                     padding=padding, bias=False, dilation=dilation)
-
-
-class BasicCNNBlock(nn.Module):
+class Basic2DCNNBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, inplanes, planes, stride=1, downsample=None,  dilation=(1, 1), residual=True):
-        super(BasicCNNBlock, self).__init__()
-        self.conv1 = conv3x3(inplanes, planes, stride,
-                             padding=dilation[0], dilation=dilation[0])
-        self.bn1 = nn.BatchNorm2d(planes)
-        self.relu = nn.ReLU(inplace=True)
-        self.conv2 = conv3x3(planes, planes,
-                             padding=dilation[1], dilation=dilation[1])
-        self.bn2 = nn.BatchNorm2d(planes)
-        self.downsample = downsample
-        self.stride = stride
-        self.residual = residual
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=(1, 1), batch_norm=False,
+                 prob_dropout=0.):
+        super(Basic2DCNNBlock, self).__init__()
+        self.conv_layer = nn.Conv2d(in_channels, out_channels, kernel_size, stride=stride, padding=padding,
+                                    dilation=dilation, groups=1, bias=True)
+        # self.reset_weights()
+        self.non_linearity = nn.ELU(inplace=False)
+        self.batch_norm = None
+        if batch_norm:
+            self.bn = nn.BatchNorm2d(out_channels)
+            self.batch_norm = True
+        self.dropout = False
+        if prob_dropout > 0.:
+            self.layer_drop = nn.Dropout2d(p=prob_dropout)
+            self.dropout = True
+
+    def reset_weights(self):
+        init.xavier_normal(self.conv_layer.weight.data)
+        # if self.conv_layer.bias is not None:
+        #    init.xavier_normal(self.conv_layer.bias.data)
 
     def forward(self, x):
-        residual = x
-
-        out = self.conv1(x)
-        out = self.bn1(out)
-        out = self.relu(out)
-
-        out = self.conv2(out)
-        out = self.bn2(out)
-
-        if self.downsample is not None:
-            residual = self.downsample(x)
-        if self.residual:
-            out += residual
-        out = self.relu(out)
+        out = self.conv_layer(x)
+        out = self.non_linearity(out)
+        if self.batch_norm:
+            out = self.bn(out)
+        if self.dropout:
+            out = self.layer_drop(out)
 
         return out
