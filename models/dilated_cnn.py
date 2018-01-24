@@ -7,6 +7,7 @@ from building_blocks import Basic2DCNNBlock
 from torch.autograd import Variable
 import math
 
+# configuration of 2D dilated CNN
 DEFAULT_DCNN_2D = {'num_of_layers': 10,
                    'kernels': [3, 3, 3, 3, 3, 3, 3, 3, 1, 1],
                    'channels': [32, 32, 32, 32, 32, 32, 32, 32, 192, 2],
@@ -14,7 +15,7 @@ DEFAULT_DCNN_2D = {'num_of_layers': 10,
                    'stride': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                    'batch_norm': [False, False, False, False, False, False, False, True, True, False],
                    'dropout': [0., 0., 0., 0., 0., 0., 0., 0.5, 0.5, 0.],
-                   'loss_function': nn.Softmax,
+                   'loss_function': nn.CrossEntropyLoss,
                    }
 
 
@@ -26,6 +27,8 @@ class BaseDilated2DCNN(nn.Module):
         self.use_cuda = use_cuda
         self.num_conv_layers = self.architecture['num_of_layers']
         self.model = self._build_dcnn()
+        # we're using CrossEntropyLoss. Implementation of PyTorch combines it with Softmax and hence
+        # not need to incorporate Softmax layer in NN
         self.loss_func = self.architecture['loss_function']()
         if self.use_cuda:
             self.cuda()
@@ -55,7 +58,6 @@ class BaseDilated2DCNN(nn.Module):
             raise ValueError("input is not of type torch.autograd.variable.Variable")
 
         out = self.model(input)
-        print("Output shape {}".format(str(out.size())))
         out = self.loss_func(out)
         return out
 

@@ -803,8 +803,11 @@ def generateBatch2D(images, labels, nsamp=10, nclass=7, classcount=(1,1)):
     ss = 50
     # mw = (259-1)/2
 
+    # batch image patch
     batch_im = np.zeros((nsamp, 1, ps, ps))
+    # batch reference image for the different classes (so for each reference class 1 image)
     batch_la = np.zeros((nsamp, nclass, ss+1, ss+1))
+    # the "complete" reference image - containing all class labels
     class_im = np.zeros((1, nsamp, ss+1, ss+1))
 
     for ns in range(nsamp):
@@ -3275,6 +3278,8 @@ def main2D(tag, task='brainmr', fold='1'):
 
 
     trainimages, trainlabels, traincount = loadImageDir(glob.glob(traindir + os.path.sep + filetype), nclass=nclass)
+    # Jorg: traincount contains numpy array with class counts from reference images
+
     # Load validation data
     valdir = os.path.dirname(os.path.realpath(__file__)) +  os.path.sep + '..' + os.path.sep + task + os.path.sep + 'fold' + str(fold) + os.path.sep + 'validate' + os.path.sep + 'images'
     valimages, vallabels, valcount = loadImageDir(glob.glob(valdir + os.path.sep + filetype), nclass=nclass)
@@ -3291,6 +3296,8 @@ def main2D(tag, task='brainmr', fold='1'):
     for it in range(num_epochs):
         print(it)
         images, labels, masks = generateBatch2D(trainimages, trainlabels, nclass=nclass, nsamp=128, classcount=traincount)
+        # Jórg: masks is not used...currently...contains empty numpy array
+        
         # images, labels_one, labels_two = generateBatch2DNew(trainimages, trainlabels, nclass=nclass, nsamp=32, classcount=traincount)
         print(images.shape)
 
