@@ -20,5 +20,8 @@ class BaseConfig(object):
         self.model_path = "models"
         self.numpy_save_filename = "aug_"
 
+        # optimizer
+        self.optimizer = "adam"
+
 
 config = BaseConfig()

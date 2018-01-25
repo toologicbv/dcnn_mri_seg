@@ -2,14 +2,18 @@ import SimpleITK as sitk
 import numpy as np
 import os
 import glob
-# import h5py
-import gc
 
 import matplotlib.pyplot as plt
 # from matplotlib import cm
 
 from torch.utils.data import Dataset
 from utils.config import config
+
+
+def write_numpy_to_image(np_array, filename):
+    img = sitk.GetImageFromArray(np_array * 256.)
+    sitk.WriteImage(img, filename)
+    print("Successfully saved image to {}".format(filename))
 
 
 def load_mhd_to_numpy(filename, data_type="float32"):
@@ -262,7 +266,7 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
         self.no_class = nclass
         self.class_count = np.zeros(self.no_class)
         if self.load_type == "raw":
-            self.load_images_from_dir()
+            self.load_images_from_dir(swap_axis=True)
         elif self.load_type == "numpy":
             self.load_numpy_arr_from_dir()
         else:
@@ -292,7 +296,7 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
 
         return img_file_list, label_file_list
 
-    def load_images_from_dir(self):
+    def load_images_from_dir(self, swap_axis=False):
         """
             Searches for files that match the search_mask-parameter and assumes that there are also
             reference aka label images accompanied with each image
@@ -304,6 +308,10 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
         for i, file_name in enumerate(img_file_list):
             print("Loading image+label from {}".format(file_name))
             mri_scan, origin, spacing = self.load_func(file_name, data_type=HVSMR2016CardiacMRI.pixel_dta_type)
+            # the Nifty files from the challenge that Jelmer provided have (z,y,x) and hence z,x must be swapped
+            if swap_axis:
+                mri_scan = np.swapaxes(mri_scan, 0, 2)
+
             if self.norm_scale == "normalize":
                 mri_scan = normalize_image(mri_scan, axis=None)
             elif self.norm_scale == "rescale":
@@ -316,13 +324,17 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
             self.spacings.append(spacing)
             print("{} / {}".format(file_name,  label_file_list[i]))
             label, _, _ = self.load_func(label_file_list[i])
-            # augment the image with additional rotated slices
-            self._augment_data(mri_scan, label, pad_size=HVSMR2016CardiacMRI.pad_size)
+            if swap_axis:
+                label = np.swapaxes(label, 0, 2)
             for class_label in range(self.no_class):
                 self.class_count[class_label] += np.sum(label == class_label)
+            # augment the image with additional rotated slices
+
+            self._augment_data(mri_scan, label, pad_size=HVSMR2016CardiacMRI.pad_size)
+
             files_loaded += 1
 
-    def _augment_data(self, image, label, pad_size=0):
+    def _augment_data(self, image, label, pad_size=0, c_count=0):
         """
         Adds all original and rotated image slices to self.images and self.labels objects
         :param image:
@@ -331,18 +343,24 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
         :return:
         """
 
-        def rotate_slice(image_slice, label_slice):
+        def rotate_slice(img_slice, lbl_slice, save=False):
             # PAD IMAGE
             for rots in range(4):
-                section = np.pad(image_slice, pad_size, 'constant', constant_values=(0,)).astype(
+                section = np.pad(img_slice, pad_size, 'constant', constant_values=(0,)).astype(
                     HVSMR2016CardiacMRI.pixel_dta_type)
                 self.images.append(section)
-                self.labels.append(label_slice)
+                self.labels.append(lbl_slice)
+                if save:
+                    lbl_slice_padded = np.pad(lbl_slice, pad_size, 'constant', constant_values=(0,)).astype(
+                                              HVSMR2016CardiacMRI.pixel_dta_type)
+                    write_numpy_to_image(section, "/home/jorg/tmp/images/y_rot_img" + str(rots+1) + ".nii")
+                    write_numpy_to_image(lbl_slice_padded, "/home/jorg/tmp/images/y_rot_lbl" + str(rots + 1) + ".nii")
                 # rotate for next iteration
-                image_slice = np.rot90(image_slice)
-                label_slice = np.rot90(label_slice)
+                img_slice = np.rot90(img_slice)
+                lbl_slice = np.rot90(lbl_slice)
 
         # for each image-slice rotate the img four times. We're doing that for all three orientations
+        found = False
         for z in range(image.shape[2]):
             label_slice = label[:, :, z]
             image_slice = image[:, :, z]
@@ -351,6 +369,18 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
         for y in range(image.shape[1]):
             label_slice = np.squeeze(label[:, y, :])
             image_slice = np.squeeze(image[:, y, :])
+            tmp_count = 0
+            total_count = float(label_slice.reshape(-1).shape[0])
+            for cls_label in np.arange(1, self.no_class+1):
+                tmp_count += np.sum(label_slice == cls_label)
+            ratio = tmp_count / total_count
+            print(ratio)
+            if not found and ratio > 0.4:
+                print("Ratio seg/img {:.2f}".format(ratio))
+                found = True
+                rotate_slice(image_slice, label_slice, save=True)
+            else:
+                rotate_slice(image_slice, label_slice)
             rotate_slice(image_slice, label_slice)
 
         for x in range(image.shape[0]):
@@ -418,8 +448,8 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
             raise IOError("Can't save {}".format(filename))
 
 
-# dataset = HVSMR2016CardiacMRI(data_dir=config.data_dir, search_mask=config.dflt_image_name + ".nii",
-#                              norm_scale="rescale", load_type="numpy")
+dataset = HVSMR2016CardiacMRI(data_dir=config.data_dir, search_mask=config.dflt_image_name + ".nii",
+                              norm_scale="rescale", load_type="raw")
 # print("Length data set {}/{}".format(dataset.__len__(), len(dataset.labels)))
 # dataset.save_to_numpy()
 # del dataset

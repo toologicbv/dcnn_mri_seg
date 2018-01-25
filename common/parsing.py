@@ -10,8 +10,9 @@ def do_parse_args():
     parser = argparse.ArgumentParser(description='PyTorch Dilated CNN')
     parser.add_argument('--cmd', choices=['train', 'test'], default="train")
     parser.add_argument('--model', default="dcnn")
+    parser.add_argument('--version', type=str, default='v1')
     parser.add_argument('--root_dir', default=config.root_dir)
-    parser.add_argument('--log_dir', default="default")
+    parser.add_argument('--log_dir', default=None)
     parser.add_argument('--use_cuda', action='store_true', default=False,
                         help='use GPU')
     parser.add_argument('--batch_size', type=int, default=64, metavar='N',

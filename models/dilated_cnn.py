@@ -4,18 +4,18 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from building_blocks import Basic2DCNNBlock
-from torch.autograd import Variable
-import math
+
 
 # configuration of 2D dilated CNN
 DEFAULT_DCNN_2D = {'num_of_layers': 10,
                    'kernels': [3, 3, 3, 3, 3, 3, 3, 3, 1, 1],
-                   'channels': [32, 32, 32, 32, 32, 32, 32, 32, 192, 2],
+                   'channels': [32, 32, 32, 32, 32, 32, 32, 32, 192, 3],  # NOTE: last channel is num_of_classes
                    'dilation': [(1, 1), (1, 1), (2, 2), (4, 4), (8, 8), (16, 16), (32, 32), (1, 1), (1, 1), (1, 1)],
                    'stride': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                    'batch_norm': [False, False, False, False, False, False, False, True, True, False],
                    'dropout': [0., 0., 0., 0., 0., 0., 0., 0.5, 0.5, 0.],
                    'loss_function': nn.CrossEntropyLoss,
+                   'output': nn.Softmax
                    }
 
 
@@ -29,6 +29,7 @@ class BaseDilated2DCNN(nn.Module):
         self.model = self._build_dcnn()
         # we're using CrossEntropyLoss. Implementation of PyTorch combines it with Softmax and hence
         # not need to incorporate Softmax layer in NN
+        self.output = self.architecture['output']()
         self.loss_func = self.architecture['loss_function']()
         if self.use_cuda:
             self.cuda()
@@ -54,12 +55,30 @@ class BaseDilated2DCNN(nn.Module):
         return nn.Sequential(*layer_list)
 
     def forward(self, input):
-        if not (isinstance(input, torch.autograd.variable.Variable) or isinstance(input, torch.autograd.variable.Variable)):
+        """
+
+        :param input:
+        :return: (1) the raw output in order to compute loss with PyTorch cross-entropy (see comment below)
+                 (2) the softmax output
+        """
+        if not isinstance(input, torch.autograd.variable.Variable):
             raise ValueError("input is not of type torch.autograd.variable.Variable")
 
         out = self.model(input)
-        out = self.loss_func(out)
-        return out
+        out_softmax = self.output(input.view(-1, input.size(1), dim=input.size(1)))
+        # we want to compute loss and analyse the segmentation predictions. PyTorch loss function CrossEntropy
+        # combines softmax with log operation. Hence for loss calculation we need the raw output aka logits
+        # without having them passed through the softmax non-linearity
+        return out, out_softmax
+
+    def get_loss(self, input, labels):
+        # we need to reshape the tensors because CrossEntropy expects 2D tensor (N, C) where C is num of classes
+        # the input tensor is in our case [batch_size, num_of_classes, height, width]
+        # the labels are                  [batch_size, 1, height, width]
+        input = input.view(-1, input.size(1))
+        labels = labels.view(-1)
+
+        return self.loss_func(input, labels)
 
     def cuda(self):
         super(BaseDilated2DCNN, self).cuda()

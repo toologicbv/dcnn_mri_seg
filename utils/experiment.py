@@ -11,6 +11,8 @@ from common.common import create_logger, create_exper_label
 
 
 run_dict = {'cmd': 'train',
+            'model': "dcnn",
+            'version': "v1",
             'data_dir': config.data_dir,
             'use_cuda': True,
             'epochs': 10,
@@ -23,6 +25,8 @@ def create_def_argparser(**kwargs):
 
     args = argparse.Namespace()
     args.cmd = kwargs['cmd']
+    args.model = kwargs['model']
+    args.version = kwargs['version']
     args.data_dir = kwargs['data_dir']
     args.use_cuda = kwargs['use_cuda']
     args.epochs = kwargs['epochs']
@@ -40,7 +44,9 @@ class Experiment(object):
         # logging
         self.logger = None
         self.output_dir = None
-
+        self.optimizer = None
+        # set this later
+        self.batches_per_epoch = 0
         if run_args is None:
             self.run_args = create_def_argparser(**run_dict)
         else:
@@ -64,10 +70,8 @@ class Experiment(object):
 
     def _set_path(self):
         if self.run_args.log_dir is None:
-            self.run_args.log_dir = self.run_args.model + + "_" + \
-                                str.replace(datetime.now(timezone('Europe/Berlin')).strftime(
-                                    '%Y-%m-%d %H:%M:%S.%f')[:-7],
-                                            ' ', '_') + "_" + create_exper_label(self) + \
+            self.run_args.log_dir = str.replace(datetime.now(timezone('Europe/Berlin')).strftime(
+                                    '%Y-%m-%d %H:%M:%S.%f')[:-7], ' ', '_') + "_" + create_exper_label(self) + \
                                 "_lr" + "{:.0e}".format(self.run_args.lr)
             self.run_args.log_dir = str.replace(str.replace(self.run_args.log_dir, ':', '_'), '-', '')
 

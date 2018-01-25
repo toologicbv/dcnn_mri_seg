@@ -56,10 +56,10 @@ class TwoDimBatchHandler(BatchHandler):
     def backward(self, *args):
         pass
 
-    def _generate_batch_2d(self, images, labels):
+    def generate_batch_2d(self, images, labels):
         b_images = np.zeros((self.batch_size, 1, self.ps_wp, self.ps_wp))
         b_labels_per_class = np.zeros((self.batch_size, self.num_classes, self.patch_size + 1, self.patch_size + 1))
-        b_labels = np.zeros((1, self.batch_size, self.patch_size + 1, self.patch_size + 1))
+        b_labels = np.zeros((self.batch_size, 1, self.patch_size + 1, self.patch_size + 1))
         num_images = len(images)
 
         for idx in range(self.batch_size):
@@ -74,14 +74,14 @@ class TwoDimBatchHandler(BatchHandler):
             b_images[idx, 0, :, :] = img
             label = label[offx:offx + self.patch_size + 1, offy:offy + self.patch_size + 1]
 
-            b_labels[0, idx, :, :] = label
+            b_labels[idx, 0, :, :] = label
 
             for cls in range(self.num_classes):
                 b_labels_per_class[idx, cls, :, :] = (label == cls).astype('int16')
 
         self.b_images = Variable(torch.FloatTensor(torch.from_numpy(b_images).float()))
-        self.b_labels = Variable(torch.FloatTensor(torch.from_numpy(b_labels).float()))
-        self.b_labels_per_class = Variable(torch.FloatTensor(torch.from_numpy(b_labels_per_class).float()))
+        self.b_labels = Variable(torch.LongTensor(torch.from_numpy(b_labels.astype(int))))
+        self.b_labels_per_class = Variable(torch.LongTensor(torch.from_numpy(b_labels_per_class.astype(int))))
 
         if self.is_cuda:
             self.cuda()
