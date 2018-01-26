@@ -19,7 +19,7 @@ def training(exper):
 
     dataset = HVSMR2016CardiacMRI(data_dir=exper.config.data_dir,
                                   search_mask=exper.config.dflt_image_name + ".nii",
-                                  norm_scale="rescale", load_type="numpy")
+                                  norm_scale="normalize", load_type="numpy")
 
     dcnn_model = load_model(exper)
     exper.optimizer = OPTIMIZER_DICT[exper.config.optimizer](dcnn_model.parameters(), lr=exper.run_args.lr)
@@ -47,7 +47,7 @@ def training(exper):
 
         end_time = time.time()
         total_time = end_time - start_time
-        exper.logger.info("End epoch {}: duration {:.2f}".format(epoch_id + 1, total_time))
+        exper.logger.info("End epoch {}: duration {:.2f} seconds".format(epoch_id + 1, total_time))
     del dataset
     del dcnn_model
 

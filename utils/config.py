@@ -1,4 +1,16 @@
 import os
+import torch.nn as nn
+
+DEFAULT_DCNN_2D = {'num_of_layers': 10,
+                   'kernels': [3, 3, 3, 3, 3, 3, 3, 3, 1, 1],
+                   'channels': [32, 32, 32, 32, 32, 32, 32, 32, 192, 3],  # NOTE: last channel is num_of_classes
+                   'dilation': [(1, 1), (1, 1), (2, 2), (4, 4), (8, 8), (16, 16), (32, 32), (1, 1), (1, 1), (1, 1)],
+                   'stride': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                   'batch_norm': [False, False, False, False, False, False, False, True, True, False],
+                   'dropout': [0., 0., 0., 0., 0., 0., 0., 0.5, 0.5, 0.],
+                   'loss_function': nn.CrossEntropyLoss,
+                   'output': nn.Softmax
+                   }
 
 
 class BaseConfig(object):
@@ -6,7 +18,8 @@ class BaseConfig(object):
     def __init__(self):
 
         # default data directory
-        self.root_dir = "/home/jorg/repository/dcnn_mri_seg"
+        # remember to ADD env variable REPO_PATH on machine. REPO_PATH=<absolute path to repository >
+        self.root_dir = self.get_rootpath()
         self.data_dir = os.path.join(self.root_dir, "data/HVSMR2016/")
         self.log_root_path = "logs"
         self.figure_path = "figures"
@@ -22,6 +35,18 @@ class BaseConfig(object):
 
         # optimizer
         self.optimizer = "adam"
+
+    def get_rootpath(self):
+        return os.environ.get("REPO_PATH", os.environ.get('HOME'))
+
+    def datapath(self, dataset=None):
+        return self.get_datapath(dataset)
+
+    def get_datapath(self, dataset=None):
+        if dataset is None:
+            return os.environ.get("PYTHON_DATA_FOLDER", "data")
+        env_variable = "PYTHON_DATA_FOLDER_%s" % dataset.upper()
+        return os.environ.get(env_variable, "data")
 
 
 config = BaseConfig()

@@ -1,22 +1,9 @@
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+from utils.config import DEFAULT_DCNN_2D
 import numpy as np
 from building_blocks import Basic2DCNNBlock
-
-
-# configuration of 2D dilated CNN
-DEFAULT_DCNN_2D = {'num_of_layers': 10,
-                   'kernels': [3, 3, 3, 3, 3, 3, 3, 3, 1, 1],
-                   'channels': [32, 32, 32, 32, 32, 32, 32, 32, 192, 3],  # NOTE: last channel is num_of_classes
-                   'dilation': [(1, 1), (1, 1), (2, 2), (4, 4), (8, 8), (16, 16), (32, 32), (1, 1), (1, 1), (1, 1)],
-                   'stride': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                   'batch_norm': [False, False, False, False, False, False, False, True, True, False],
-                   'dropout': [0., 0., 0., 0., 0., 0., 0., 0.5, 0.5, 0.],
-                   'loss_function': nn.CrossEntropyLoss,
-                   'output': nn.Softmax
-                   }
 
 
 class BaseDilated2DCNN(nn.Module):
@@ -65,7 +52,10 @@ class BaseDilated2DCNN(nn.Module):
             raise ValueError("input is not of type torch.autograd.variable.Variable")
 
         out = self.model(input)
-        out_softmax = self.output(input.view(-1, input.size(1), dim=input.size(1)))
+
+        out_softmax = self.output(input.view(-1, input.size(1)))
+        # dim parameter in softmax only works in new PyTorch version 0.4.0
+        # out_softmax = self.output(input.view(-1, input.size(1), dim=input.size(1)))
         # we want to compute loss and analyse the segmentation predictions. PyTorch loss function CrossEntropy
         # combines softmax with log operation. Hence for loss calculation we need the raw output aka logits
         # without having them passed through the softmax non-linearity

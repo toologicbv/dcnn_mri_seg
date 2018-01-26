@@ -10,7 +10,7 @@ class Basic2DCNNBlock(nn.Module):
         super(Basic2DCNNBlock, self).__init__()
         self.conv_layer = nn.Conv2d(in_channels, out_channels, kernel_size, stride=stride, padding=padding,
                                     dilation=dilation, groups=1, bias=True)
-        # self.reset_weights()
+        self.reset_weights()
         self.non_linearity = nn.ELU(inplace=False)
         self.batch_norm = None
         if batch_norm:
@@ -23,8 +23,8 @@ class Basic2DCNNBlock(nn.Module):
 
     def reset_weights(self):
         init.xavier_normal(self.conv_layer.weight.data)
-        # if self.conv_layer.bias is not None:
-        #    init.xavier_normal(self.conv_layer.bias.data)
+        if self.conv_layer.bias is not None:
+            self.conv_layer.bias.data.fill_(0)
 
     def forward(self, x):
         out = self.conv_layer(x)

@@ -1,8 +1,9 @@
 import abc
-
+import os
 import numpy as np
 import torch
 from torch.autograd import Variable
+from in_out.load_data import write_numpy_to_image
 
 
 class BatchHandler(object):
@@ -44,6 +45,7 @@ class TwoDimBatchHandler(BatchHandler):
         self.b_labels = None
         # this objects holds for each image-slice the separate class labels, so one set for each class
         self.b_labels_per_class = None
+        self.config = exper.config
 
     def cuda(self):
         self.b_images = self.b_images.cuda()
@@ -61,9 +63,10 @@ class TwoDimBatchHandler(BatchHandler):
         b_labels_per_class = np.zeros((self.batch_size, self.num_classes, self.patch_size + 1, self.patch_size + 1))
         b_labels = np.zeros((self.batch_size, 1, self.patch_size + 1, self.patch_size + 1))
         num_images = len(images)
-
+        # img_nums = []
         for idx in range(self.batch_size):
-            ind = np.random.randint(0, num_images, 1)[0]
+            ind = np.random.randint(0, num_images)
+            # img_nums.append(str(ind))
             img = images[ind]
             label = labels[ind]
 
@@ -78,7 +81,7 @@ class TwoDimBatchHandler(BatchHandler):
 
             for cls in range(self.num_classes):
                 b_labels_per_class[idx, cls, :, :] = (label == cls).astype('int16')
-
+        # print("Images used {}".format(",".join(img_nums)))
         self.b_images = Variable(torch.FloatTensor(torch.from_numpy(b_images).float()))
         self.b_labels = Variable(torch.LongTensor(torch.from_numpy(b_labels.astype(int))))
         self.b_labels_per_class = Variable(torch.LongTensor(torch.from_numpy(b_labels_per_class.astype(int))))
@@ -89,4 +92,18 @@ class TwoDimBatchHandler(BatchHandler):
         del b_images
         del b_labels
         del b_labels_per_class
+
+    def save_batch_img_to_files(self):
+        for i in np.arange(self.batch_size):
+            filename_img = os.path.join(self.config.data_dir, "b_img" + str(i+1).zfill(2) + ".nii")
+            write_numpy_to_image(self.b_images[i].data.cpu().numpy(), filename=filename_img)
+
+            lbl = self.b_labels[i].data.cpu().numpy()
+            print(np.unique(lbl))
+            for l in np.unique(lbl):
+                if l != 0:
+                    cls_lbl = self.b_labels_per_class[i, l].data.cpu().numpy()
+                    filename_lbl = os.path.join(self.config.data_dir, "b_lbl" + str(i + 1).zfill(2) + "_" + str(l) + ".nii")
+                    lbl = np.pad(cls_lbl, 65, 'constant', constant_values=(0,)).astype("float32")
+                    write_numpy_to_image(lbl, filename=filename_lbl)
 

@@ -1,7 +1,10 @@
+import sys
 import SimpleITK as sitk
 import numpy as np
 import os
 import glob
+if "/home/jogi/.local/lib/python2.7/site-packages" in sys.path:
+    sys.path.remove("/home/jogi/.local/lib/python2.7/site-packages")
 
 import matplotlib.pyplot as plt
 # from matplotlib import cm
@@ -11,7 +14,7 @@ from utils.config import config
 
 
 def write_numpy_to_image(np_array, filename):
-    img = sitk.GetImageFromArray(np_array * 256.)
+    img = sitk.GetImageFromArray(np_array )
     sitk.WriteImage(img, filename)
     print("Successfully saved image to {}".format(filename))
 
@@ -63,7 +66,9 @@ def rescale_image(img, perc_low=5, perc_high=95, axis=None):
 
 
 def normalize_image(img, axis=None):
-    img = (img - np.mean(img, axis=axis) / np.std(img, axis=axis))
+    print("Before ", np.mean(img, axis=axis))
+    img = (img - np.mean(img, axis=axis)) / np.std(img, axis=axis)
+    print("After ", np.mean(img, axis=axis))
     return img
 
 
@@ -74,7 +79,7 @@ class BaseImageDataSet(Dataset):
                 data_dir = config.data_dir
             else:
                 raise ValueError("parameter {} is None, cannot load images".format(data_dir))
-        assert os.path.exists(data_dir)
+        assert os.path.exists(data_dir), "{} does not exist".format(data_dir)
         self.data_dir = data_dir
         self.search_mask = None
         self.images = None
@@ -237,7 +242,7 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
     pad_size = 65
 
     def __init__(self, data_dir, search_mask=None, nclass=3, transform=False, conf_obj=None,
-                 load_func=load_mhd_to_numpy, norm_scale=None, mode="train", load_type="raw"):
+                 load_func=load_mhd_to_numpy, norm_scale="normalize", mode="train", load_type="raw"):
         """
         The images are already resampled to an isotropic 3D size of 0.65mm x 0.65 x 0.65
 
@@ -269,6 +274,9 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
             self.load_images_from_dir(swap_axis=True)
         elif self.load_type == "numpy":
             self.load_numpy_arr_from_dir()
+            if len(self.images) == 0:
+                print("Info - cannot find any numpy npz files. Looking for raw files...")
+                self.load_images_from_dir(swap_axis=True)
         else:
             raise ValueError("Load mode {} is not supported".format(self.load_type))
 
@@ -306,19 +314,22 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
 
         img_file_list, label_file_list = self._get_file_lists()
         for i, file_name in enumerate(img_file_list):
-            print("Loading image+label from {}".format(file_name))
+            print("> > > Loading image+label from {}".format(file_name))
             mri_scan, origin, spacing = self.load_func(file_name, data_type=HVSMR2016CardiacMRI.pixel_dta_type)
             # the Nifty files from the challenge that Jelmer provided have (z,y,x) and hence z,x must be swapped
             if swap_axis:
                 mri_scan = np.swapaxes(mri_scan, 0, 2)
 
             if self.norm_scale == "normalize":
+                print("> > > Info - Normalizing images intensity values")
                 mri_scan = normalize_image(mri_scan, axis=None)
+
             elif self.norm_scale == "rescale":
                 mri_scan = rescale_image(mri_scan, axis=None)
+                print("> > > Info - Rescaling images intensity values")
             else:
                 # no rescaling or normalization
-                print("Info - No rescaling or normalization applied to image!")
+                print("> > > Info - No rescaling or normalization applied to image!")
             # add a front axis to the numpy array, will use that to concatenate the image slices
             self.origins.append(origin)
             self.spacings.append(spacing)
@@ -350,11 +361,11 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
                     HVSMR2016CardiacMRI.pixel_dta_type)
                 self.images.append(section)
                 self.labels.append(lbl_slice)
-                if save:
-                    lbl_slice_padded = np.pad(lbl_slice, pad_size, 'constant', constant_values=(0,)).astype(
-                                              HVSMR2016CardiacMRI.pixel_dta_type)
-                    write_numpy_to_image(section, "/home/jorg/tmp/images/y_rot_img" + str(rots+1) + ".nii")
-                    write_numpy_to_image(lbl_slice_padded, "/home/jorg/tmp/images/y_rot_lbl" + str(rots + 1) + ".nii")
+                # if save:
+                #    lbl_slice_padded = np.pad(lbl_slice, pad_size, 'constant', constant_values=(0,)).astype(
+                #                              HVSMR2016CardiacMRI.pixel_dta_type)
+                #    write_numpy_to_image(section, "/home/jorg/tmp/images/y_rot_img" + str(rots+1) + ".nii")
+                #    write_numpy_to_image(lbl_slice_padded, "/home/jorg/tmp/images/y_rot_lbl" + str(rots + 1) + ".nii")
                 # rotate for next iteration
                 img_slice = np.rot90(img_slice)
                 lbl_slice = np.rot90(lbl_slice)
@@ -369,18 +380,6 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
         for y in range(image.shape[1]):
             label_slice = np.squeeze(label[:, y, :])
             image_slice = np.squeeze(image[:, y, :])
-            tmp_count = 0
-            total_count = float(label_slice.reshape(-1).shape[0])
-            for cls_label in np.arange(1, self.no_class+1):
-                tmp_count += np.sum(label_slice == cls_label)
-            ratio = tmp_count / total_count
-            print(ratio)
-            if not found and ratio > 0.4:
-                print("Ratio seg/img {:.2f}".format(ratio))
-                found = True
-                rotate_slice(image_slice, label_slice, save=True)
-            else:
-                rotate_slice(image_slice, label_slice)
             rotate_slice(image_slice, label_slice)
 
         for x in range(image.shape[0]):
@@ -401,9 +400,9 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
             out_dir = os.path.join(abs_path, "test")
 
         search_mask = os.path.join(out_dir, file_prefix + "*.npz")
-        print("Info - Looking for files with search_mask {}".format(search_mask))
+        print(">>>>>>>>>>>> Info - Looking for files with search_mask {}".format(search_mask))
         for fname in glob.glob(search_mask):
-            print("Info - Loading numpy objects from {}".format(fname))
+            print(">>>>>>>>>>>>>>> Info - Loading numpy objects from {}".format(fname))
             numpy_ar = np.load(fname)
             self.images.extend(list(numpy_ar["images"]))
             self.labels.extend(list(numpy_ar["labels"]))
@@ -424,22 +423,16 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
             out_filename = os.path.join(abs_path, "test")
 
         try:
-            print("Trying to save data to directory {}".format(abs_path))
-
             chunksize = 1000
             start = 0
             end = chunksize
             for c, chunk in enumerate(np.arange(chunksize)):
                 filename = os.path.join(out_filename, file_prefix + str(chunk) + ".npz")
+                print("> > > Info - Save (chunked) data to directory {}".format(filename))
                 np.savez(filename, images=self.images[start:end],
                          labels=self.labels[start:end],
                          class_count=self.class_count)
-                filename_hdf5 = os.path.join(out_filename, file_prefix + str(chunk) + ".hd5f")
-                # h5f = h5py.File(filename_hdf5, 'w')
-                # h5f.create_dataset('images', data=self.images[start:end])
-                # h5f.create_dataset('labels', data=self.labels[start:end])
-                # h5f.create_dataset('class_count', data=self.class_count)
-                # h5f.close()
+
                 start += chunksize
                 end += chunksize
                 if c == 3:
@@ -448,8 +441,8 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
             raise IOError("Can't save {}".format(filename))
 
 
-dataset = HVSMR2016CardiacMRI(data_dir=config.data_dir, search_mask=config.dflt_image_name + ".nii",
-                              norm_scale="rescale", load_type="raw")
+# dataset = HVSMR2016CardiacMRI(data_dir=config.data_dir, search_mask=config.dflt_image_name + ".nii",
+#                              norm_scale="normalize", load_type="numpy")
 # print("Length data set {}/{}".format(dataset.__len__(), len(dataset.labels)))
 # dataset.save_to_numpy()
 # del dataset

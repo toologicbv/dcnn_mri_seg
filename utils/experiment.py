@@ -15,9 +15,11 @@ run_dict = {'cmd': 'train',
             'version': "v1",
             'data_dir': config.data_dir,
             'use_cuda': True,
-            'epochs': 10,
-            'batch_size': 10,
-            'lr': 1e-4
+            'epochs': 1,
+            'batch_size': 2,
+            'lr': 1e-4,
+            'retrain': False,
+            'log_dir': None
 }
 
 
@@ -33,6 +35,7 @@ def create_def_argparser(**kwargs):
     args.batch_size = kwargs['batch_size']
     args.lr = kwargs['lr']
     args.retrain = kwargs['retrain']
+    args.log_dir = kwargs['log_dir']
     args.cuda = args.use_cuda and torch.cuda.is_available()
     return args
 
