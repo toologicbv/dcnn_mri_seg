@@ -30,6 +30,7 @@ class TwoDimBatchHandler(BatchHandler):
     # we use a zero-padding of 65 on both dimensions, equals 130 positions
     patch_size_with_padding = 201
     patch_size = 70
+    pixel_dta_type = "float32"
 
     def __init__(self, exper, is_train=True, num_classes=3):
         self.batch_size = exper.run_args.batch_size
@@ -70,10 +71,15 @@ class TwoDimBatchHandler(BatchHandler):
             img = images[ind]
             label = labels[ind]
 
-            offx = np.random.randint(0, img.shape[0] - self.ps_wp)
-            offy = np.random.randint(0, img.shape[1] - self.ps_wp)
+            # offx = np.random.randint(0, img.shape[0] - self.ps_wp)
+            # offy = np.random.randint(0, img.shape[1] - self.ps_wp)
+            offx = np.random.randint(0, img.shape[0] - self.patch_size)
+            offy = np.random.randint(0, img.shape[1] - self.patch_size)
 
-            img = img[offx:offx + self.ps_wp, offy:offy + self.ps_wp]
+            img = img[offx:offx + self.patch_size + 1, offy:offy + self.patch_size + 1]
+            # now add padding
+            img = np.pad(img, 65, 'constant', constant_values=(0,)).astype(
+                TwoDimBatchHandler.pixel_dta_type)
             b_images[idx, 0, :, :] = img
             label = label[offx:offx + self.patch_size + 1, offy:offy + self.patch_size + 1]
 

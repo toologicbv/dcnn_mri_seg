@@ -7,6 +7,7 @@ DEFAULT_DCNN_2D = {'num_of_layers': 10,
                    'dilation': [(1, 1), (1, 1), (2, 2), (4, 4), (8, 8), (16, 16), (32, 32), (1, 1), (1, 1), (1, 1)],
                    'stride': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                    'batch_norm': [False, False, False, False, False, False, False, True, True, False],
+                   'non_linearity': [True, True, True, True, True, True, True, True, True, False],
                    'dropout': [0., 0., 0., 0., 0., 0., 0., 0.5, 0.5, 0.],
                    'loss_function': nn.CrossEntropyLoss,
                    'output': nn.Softmax

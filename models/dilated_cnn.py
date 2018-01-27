@@ -36,7 +36,8 @@ class BaseDilated2DCNN(nn.Module):
                                               self.architecture['kernels'][l],
                                               stride=self.architecture['stride'][l],
                                               dilation=self.architecture['dilation'][l],
-                                              batch_norm=self.architecture['batch_norm'][l],
+                                              apply_batch_norm=self.architecture['batch_norm'][l],
+                                              apply_non_linearity=self.architecture['non_linearity'][l],
                                               prob_dropout=self.architecture['dropout'][l]))
 
         return nn.Sequential(*layer_list)
@@ -67,7 +68,7 @@ class BaseDilated2DCNN(nn.Module):
         # the labels are                  [batch_size, 1, height, width]
         input = input.view(-1, input.size(1))
         labels = labels.view(-1)
-
+        # print("Loss sizes ", input.size(), labels.size())
         return self.loss_func(input, labels)
 
     def cuda(self):

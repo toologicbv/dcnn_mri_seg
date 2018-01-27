@@ -1,5 +1,8 @@
 import time
+import os
+import glob
 import torch
+from torch.autograd import Variable
 
 from common.parsing import do_parse_args
 from common.common import print_flags, OPTIMIZER_DICT
@@ -8,6 +11,8 @@ from utils.config import config
 from utils.batch_handlers import TwoDimBatchHandler
 from in_out.load_data import HVSMR2016CardiacMRI
 from models.model_handler import load_model
+
+from jelmer_util.helper import loadImageDir, generateBatch2D
 
 
 def training(exper):
@@ -34,6 +39,7 @@ def training(exper):
         for batch_id in range(exper.batches_per_epoch):
             new_batch = TwoDimBatchHandler(exper)
             new_batch.generate_batch_2d(dataset.images, dataset.labels)
+            new_batch.save_batch_img_to_files()
             # print("new_batch.b_images", new_batch.b_images.shape)
             b_out, b_out_softmax = dcnn_model(new_batch.b_images)
             b_loss = dcnn_model.get_loss(b_out, new_batch.b_labels)
@@ -52,6 +58,45 @@ def training(exper):
     del dcnn_model
 
 
+def trainingv2(exper):
+    traindir = os.path.join(config.data_dir, "train")
+    filetype = "*image*.nii"
+    images, labels, traincount = loadImageDir(glob.glob(traindir + os.path.sep + filetype), nclass=3)
+
+    dcnn_model = load_model(exper)
+    exper.optimizer = OPTIMIZER_DICT[exper.config.optimizer](dcnn_model.parameters(), lr=exper.run_args.lr)
+
+    exper.batches_per_epoch = (len(images) / exper.run_args.batch_size)
+    exper.logger.info("Size data-set {} // number of epochs {} // batch-size {} // batches/epoch {}".format(
+        len(images), exper.run_args.epochs, exper.run_args.batch_size, exper.batches_per_epoch))
+
+    for epoch_id in range(exper.run_args.epochs):
+        start_time = time.time()
+        exper.logger.info("Start epoch {}".format(epoch_id + 1))
+        for batch_id in range(exper.batches_per_epoch):
+            b_images, b_labels, _, _ = generateBatch2D(images, labels, nclass=3, nsamp=128, classcount=traincount)
+            b_images = Variable(torch.FloatTensor(torch.from_numpy(b_images).float()))
+            b_labels = Variable(torch.LongTensor(torch.from_numpy(b_labels.astype(int))))
+            if exper.run_args.cuda:
+                b_images = b_images.cuda()
+                b_labels = b_labels.cuda()
+            b_out, b_out_softmax = dcnn_model(b_images)
+            b_loss = dcnn_model.get_loss(b_out, b_labels)
+            # compute gradients w.r.t. model parameters
+            b_loss.backward(retain_graph=False)
+            exper.optimizer.step()
+            sum_grads = dcnn_model.sum_grads()
+            exper.logger.info("Current batch-loss {:.4f} / gradients {:.3f}".format(
+                b_loss.data.cpu().squeeze().numpy()[0], sum_grads))
+            dcnn_model.zero_grad()
+
+        end_time = time.time()
+        total_time = end_time - start_time
+        exper.logger.info("End epoch {}: duration {:.2f} seconds".format(epoch_id + 1, total_time))
+
+    del dcnn_model
+
+
 def main():
     args = do_parse_args()
 
@@ -61,6 +106,8 @@ def main():
 
     if args.cmd == 'train':
         training(exper)
+    elif args.cmd == "trainv2":
+        trainingv2(exper)
     elif args.cmd == 'test':
         raise NotImplementedError("test mode is not yet implemented")
 

@@ -357,9 +357,11 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
         def rotate_slice(img_slice, lbl_slice, save=False):
             # PAD IMAGE
             for rots in range(4):
-                section = np.pad(img_slice, pad_size, 'constant', constant_values=(0,)).astype(
-                    HVSMR2016CardiacMRI.pixel_dta_type)
-                self.images.append(section)
+                # no padding here but when we extract patches during BatchGeneration
+                # section = np.pad(img_slice, pad_size, 'constant', constant_values=(0,)).astype(
+                #    HVSMR2016CardiacMRI.pixel_dta_type)
+                # self.images.append(section)
+                self.images.append(img_slice)
                 self.labels.append(lbl_slice)
                 # if save:
                 #    lbl_slice_padded = np.pad(lbl_slice, pad_size, 'constant', constant_values=(0,)).astype(

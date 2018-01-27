@@ -8,7 +8,7 @@ from utils.config import config
 def do_parse_args():
     # Training settings
     parser = argparse.ArgumentParser(description='PyTorch Dilated CNN')
-    parser.add_argument('--cmd', choices=['train', 'test'], default="train")
+    parser.add_argument('--cmd', choices=['train', 'trainv2', 'test'], default="train")
     parser.add_argument('--model', default="dcnn")
     parser.add_argument('--version', type=str, default='v1')
     parser.add_argument('--root_dir', default=config.root_dir)
