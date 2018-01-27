@@ -59,7 +59,7 @@ class TwoDimBatchHandler(BatchHandler):
     def backward(self, *args):
         pass
 
-    def generate_batch_2d(self, images, labels):
+    def generate_batch_2d(self, images, labels, save_batch=False):
         b_images = np.zeros((self.batch_size, 1, self.ps_wp, self.ps_wp))
         b_labels_per_class = np.zeros((self.batch_size, self.num_classes, self.patch_size + 1, self.patch_size + 1))
         b_labels = np.zeros((self.batch_size, 1, self.patch_size + 1, self.patch_size + 1))
@@ -71,15 +71,11 @@ class TwoDimBatchHandler(BatchHandler):
             img = images[ind]
             label = labels[ind]
 
-            # offx = np.random.randint(0, img.shape[0] - self.ps_wp)
-            # offy = np.random.randint(0, img.shape[1] - self.ps_wp)
-            offx = np.random.randint(0, img.shape[0] - self.patch_size)
-            offy = np.random.randint(0, img.shape[1] - self.patch_size)
+            offx = np.random.randint(0, img.shape[0] - self.ps_wp)
+            offy = np.random.randint(0, img.shape[1] - self.ps_wp)
 
-            img = img[offx:offx + self.patch_size + 1, offy:offy + self.patch_size + 1]
-            # now add padding
-            img = np.pad(img, 65, 'constant', constant_values=(0,)).astype(
-                TwoDimBatchHandler.pixel_dta_type)
+            img = img[offx:offx + self.ps_wp, offy:offy + self.ps_wp]
+
             b_images[idx, 0, :, :] = img
             label = label[offx:offx + self.patch_size + 1, offy:offy + self.patch_size + 1]
 
@@ -91,6 +87,8 @@ class TwoDimBatchHandler(BatchHandler):
         self.b_images = Variable(torch.FloatTensor(torch.from_numpy(b_images).float()))
         self.b_labels = Variable(torch.LongTensor(torch.from_numpy(b_labels.astype(int))))
         self.b_labels_per_class = Variable(torch.LongTensor(torch.from_numpy(b_labels_per_class.astype(int))))
+        if save_batch:
+            self.save_batch_img_to_files()
 
         if self.is_cuda:
             self.cuda()

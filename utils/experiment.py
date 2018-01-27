@@ -4,7 +4,7 @@ import argparse
 import os
 from datetime import datetime
 from pytz import timezone
-
+import dill
 from config import config
 
 from common.common import create_logger, create_exper_label
@@ -19,7 +19,8 @@ run_dict = {'cmd': 'train',
             'batch_size': 2,
             'lr': 1e-4,
             'retrain': False,
-            'log_dir': None
+            'log_dir': None,
+            'chkpnt': False
 }
 
 
@@ -37,6 +38,7 @@ def create_def_argparser(**kwargs):
     args.retrain = kwargs['retrain']
     args.log_dir = kwargs['log_dir']
     args.cuda = args.use_cuda and torch.cuda.is_available()
+    args.chkpnt = os.path.join(config.checkpoint_path, "default.tar")
     return args
 
 
@@ -45,6 +47,8 @@ class Experiment(object):
     def __init__(self, config, run_args=None, set_seed=False):
 
         # logging
+        self.epoch_id = 0
+        self.chkpnt_dir = None
         self.logger = None
         self.output_dir = None
         self.optimizer = None
@@ -55,7 +59,9 @@ class Experiment(object):
         else:
             self.run_args = run_args
         self.config = config
+        self.epoch_stats = None
         self._set_path()
+        self.init_statistics()
 
         if set_seed:
             SEED = 2345
@@ -63,6 +69,9 @@ class Experiment(object):
             if run_args.cuda:
                 torch.cuda.manual_seed(SEED)
             np.random.seed(SEED)
+
+    def init_statistics(self):
+        self.epoch_stats = {'mean_loss': np.zeros(self.run_args.epochs)}
 
     def start(self, exper_logger=None):
 
@@ -87,5 +96,25 @@ class Experiment(object):
             os.makedirs(log_dir)
             fig_path = os.path.join(log_dir, self.config.figure_path)
             os.makedirs(fig_path)
-
+            if self.run_args.chkpnt:
+                self.chkpnt_dir = os.path.join(log_dir, self.config.checkpoint_path)
+                os.makedirs(self.chkpnt_dir)
         self.output_dir = log_dir
+
+    def save(self, file_name=None):
+        if file_name is None:
+            file_name = "exper_stats@{}".format(self.epoch_id) + ".dll"
+
+        outfile = os.path.join(self.output_dir, file_name)
+        logger = self.logger
+        optimizer = self.optimizer
+        self.logger = None
+        self.optimizer = None
+
+        with open(outfile, 'wb') as f:
+            dill.dump(self, f)
+        self.logger = logger
+        self.optimizer = optimizer
+
+        if self.logger is not None:
+            self.logger.info("Epoch: {} - Saving experimental details to {}".format(self.epoch_id, outfile))

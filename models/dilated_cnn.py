@@ -4,6 +4,8 @@ import torch.nn as nn
 from utils.config import DEFAULT_DCNN_2D
 import numpy as np
 from building_blocks import Basic2DCNNBlock
+import shutil
+import os
 
 
 class BaseDilated2DCNN(nn.Module):
@@ -54,7 +56,7 @@ class BaseDilated2DCNN(nn.Module):
 
         out = self.model(input)
 
-        out_softmax = self.output(input.view(-1, input.size(1)))
+        out_softmax = self.output(out.view(-1, out.size(1)))
         # dim parameter in softmax only works in new PyTorch version 0.4.0
         # out_softmax = self.output(input.view(-1, input.size(1), dim=input.size(1)))
         # we want to compute loss and analyse the segmentation predictions. PyTorch loss function CrossEntropy
@@ -62,14 +64,14 @@ class BaseDilated2DCNN(nn.Module):
         # without having them passed through the softmax non-linearity
         return out, out_softmax
 
-    def get_loss(self, input, labels):
+    def get_loss(self, predictions, labels):
         # we need to reshape the tensors because CrossEntropy expects 2D tensor (N, C) where C is num of classes
         # the input tensor is in our case [batch_size, num_of_classes, height, width]
         # the labels are                  [batch_size, 1, height, width]
-        input = input.view(-1, input.size(1))
+        predictions = predictions.view(-1, predictions.size(1))
         labels = labels.view(-1)
         # print("Loss sizes ", input.size(), labels.size())
-        return self.loss_func(input, labels)
+        return self.loss_func(predictions, labels)
 
     def cuda(self):
         super(BaseDilated2DCNN, self).cuda()
@@ -91,4 +93,93 @@ class BaseDilated2DCNN(nn.Module):
 
         return sum_grads
 
+
+class DilatedCNN(nn.Module):
+
+    def __init__(self, use_cuda=False):
+        super(DilatedCNN, self).__init__()
+        self.use_cuda = use_cuda
+
+        self.layer1 = nn.Conv2d(1, 32, kernel_size=3, stride=1, dilation=1)
+        self.elu1 = nn.ELU(inplace=True)
+        self.layer2 = nn.Conv2d(32, 32, kernel_size=3, stride=1, dilation=1)
+        self.elu2 = nn.ELU(inplace=True)
+        self.layer3 = nn.Conv2d(32, 32, kernel_size=3, stride=1, dilation=2)
+        self.elu3 = nn.ELU(inplace=True)
+        self.layer4 = nn.Conv2d(32, 32, kernel_size=3, stride=1, dilation=4)
+        self.elu4 = nn.ELU(inplace=True)
+        self.layer5 = nn.Conv2d(32, 32, kernel_size=3, stride=1, dilation=8)
+        self.elu5 = nn.ELU(inplace=True)
+        self.layer6 = nn.Conv2d(32, 32, kernel_size=3, stride=1, dilation=16)
+        self.elu6 = nn.ELU(inplace=True)
+        self.layer7 = nn.Conv2d(32, 32, kernel_size=3, stride=1, dilation=32)
+        self.elu7 = nn.ELU(inplace=True)
+        self.layer8 = nn.Conv2d(32, 32, kernel_size=3, stride=1, dilation=1)
+        self.elu8 = nn.ELU(inplace=True)
+        self.bn8 = nn.BatchNorm2d(32)
+        self.layer_drop8 = nn.Dropout2d(p=0.5)
+        self.layer9 = nn.Conv2d(32, 192, kernel_size=1, stride=1, dilation=1)
+        self.elu9 = nn.ELU(inplace=True)
+        self.bn9 = nn.BatchNorm2d(192)
+        self.layer_drop9 = nn.Dropout2d(p=0.5)
+        self.layer10 = nn.Conv2d(192, 3, kernel_size=1, stride=1, dilation=1)
+        self.log_softmax = nn.LogSoftmax(dim=1)
+        self.loss_function = nn.NLLLoss2d()
+        if self.use_cuda:
+            self.cuda()
+        print(">>> Everything is set-up!")
+
+    def forward(self, input):
+        out = self.layer1(input)
+        out = self.elu1(out)
+        out = self.layer2(out)
+        out = self.elu2(out)
+        out = self.layer3(out)
+        out = self.elu3(out)
+        out = self.layer4(out)
+        out = self.elu4(out)
+        out = self.layer5(out)
+        out = self.elu5(out)
+        out = self.layer6(out)
+        out = self.elu6(out)
+        out = self.layer7(out)
+        out = self.elu7(out)
+        out = self.layer8(out)
+        out = self.elu8(out)
+        out = self.bn8(out)
+        out = self.layer_drop8(out)
+        out = self.layer9(out)
+        out = self.elu9(out)
+        out = self.bn9(out)
+        out = self.layer_drop9(out)
+        out = self.layer10(out)
+        out = self.log_softmax(out)
+        return out, None
+
+    def get_loss(self, predictions, labels):
+        # we need to reshape the tensors because CrossEntropy expects 2D tensor (N, C) where C is num of classes
+        # the input tensor is in our case [batch_size, num_of_classes, height, width]
+        # the labels are                  [batch_size, 1, height, width]
+        labels = labels.view(labels.size(0), labels.size(2), labels.size(3))
+        # print("Loss sizes ", predictions.size(), labels.size())
+        return self.loss_function(predictions, labels)
+
+    def cuda(self):
+        super(DilatedCNN, self).cuda()
+
+    def zero_grad(self):
+        super(DilatedCNN, self).zero_grad()
+
+    def sum_grads(self, verbose=False):
+        sum_grads = 0
+        for name, param in self.named_parameters():
+            if param.grad is not None:
+                sum_grads += torch.sum(torch.abs(param.grad.data))
+            else:
+                if verbose:
+                    print("WARNING - No gradients for parameter >>> {} <<<".format(name))
+
+        return sum_grads
+
 # dcnn_model = BaseDilated2DCNN(use_cuda=True)
+# dcnn_model = DilatedCNN(use_cuda=True)

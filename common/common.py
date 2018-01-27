@@ -1,6 +1,7 @@
 from utils.config import config
 import logging
 import os
+import time
 
 import torch
 
@@ -11,6 +12,11 @@ OPTIMIZER_DICT = {'sgd': torch.optim.SGD,  # Gradient Descent
                   'adam': torch.optim.Adam,  # Adam
                   'rmsprop': torch.optim.RMSprop  # RMSprop
                   }
+
+
+def datestr():
+    now = time.gmtime()
+    return '{}{:02}{:02}_{:02}{:02}'.format(now.tm_year, now.tm_mon, now.tm_mday, now.tm_hour, now.tm_min)
 
 
 def create_logger(exper=None, file_handler=False, output_dir=None):

@@ -4,7 +4,7 @@ import torch.nn as nn
 DEFAULT_DCNN_2D = {'num_of_layers': 10,
                    'kernels': [3, 3, 3, 3, 3, 3, 3, 3, 1, 1],
                    'channels': [32, 32, 32, 32, 32, 32, 32, 32, 192, 3],  # NOTE: last channel is num_of_classes
-                   'dilation': [(1, 1), (1, 1), (2, 2), (4, 4), (8, 8), (16, 16), (32, 32), (1, 1), (1, 1), (1, 1)],
+                   'dilation': [1, 1, 2, 4, (8, 8), (16, 16), (32, 32), (1, 1), (1, 1), (1, 1)],
                    'stride': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                    'batch_norm': [False, False, False, False, False, False, False, True, True, False],
                    'non_linearity': [True, True, True, True, True, True, True, True, True, False],
@@ -24,8 +24,9 @@ class BaseConfig(object):
         self.data_dir = os.path.join(self.root_dir, "data/HVSMR2016/")
         self.log_root_path = "logs"
         self.figure_path = "figures"
+        self.checkpoint_path = "checkpoints"
         self.logger_filename = "run_out.log"
-        # standard image name (Sunnybrook have all the same but in different directories
+        # standard image name
         self.dflt_image_name = "*image*"
         self.dflt_label_name = "*label*"
         # used as filename for the logger

@@ -10,7 +10,7 @@ from utils.experiment import Experiment
 from utils.config import config
 from utils.batch_handlers import TwoDimBatchHandler
 from in_out.load_data import HVSMR2016CardiacMRI
-from models.model_handler import load_model
+from models.model_handler import load_model, save_checkpoint
 
 from jelmer_util.helper import loadImageDir, generateBatch2D
 
@@ -26,34 +26,45 @@ def training(exper):
                                   search_mask=exper.config.dflt_image_name + ".nii",
                                   norm_scale="normalize", load_type="numpy")
 
-    dcnn_model = load_model(exper)
+    dcnn_model = load_model(exper, simple=True)
     exper.optimizer = OPTIMIZER_DICT[exper.config.optimizer](dcnn_model.parameters(), lr=exper.run_args.lr)
 
-    exper.batches_per_epoch = (dataset.__len__() / exper.run_args.batch_size)
+    exper.batches_per_epoch = 2
     exper.logger.info("Size data-set {} // number of epochs {} // batch-size {} // batches/epoch {}".format(
         dataset.__len__(), exper.run_args.epochs, exper.run_args.batch_size, exper.batches_per_epoch))
 
     for epoch_id in range(exper.run_args.epochs):
+        exper.epoch_id += 1
         start_time = time.time()
-        exper.logger.info("Start epoch {}".format(epoch_id+1))
+        exper.logger.info("Start epoch {}".format(exper.epoch_id))
         for batch_id in range(exper.batches_per_epoch):
             new_batch = TwoDimBatchHandler(exper)
             new_batch.generate_batch_2d(dataset.images, dataset.labels)
-            new_batch.save_batch_img_to_files()
+
             # print("new_batch.b_images", new_batch.b_images.shape)
             b_out, b_out_softmax = dcnn_model(new_batch.b_images)
             b_loss = dcnn_model.get_loss(b_out, new_batch.b_labels)
             # compute gradients w.r.t. model parameters
             b_loss.backward(retain_graph=False)
             exper.optimizer.step()
-            sum_grads = dcnn_model.sum_grads()
-            exper.logger.info("Current batch-loss {:.4f} / gradients {:.3f}".format(
-                b_loss.data.cpu().squeeze().numpy()[0], sum_grads))
+            # sum_grads = dcnn_model.sum_grads()
+            exper.epoch_stats["mean_loss"][epoch_id] += b_loss.data.cpu().squeeze().numpy()
             dcnn_model.zero_grad()
 
+        exper.epoch_stats["mean_loss"][epoch_id] *= 1./float(exper.batches_per_epoch)
+        if exper.run_args.chkpnt and (exper.epoch_id % 100 == 0 or exper.epoch_id == exper.run_args.epochs):
+            save_checkpoint(exper, {'epoch': exper.epoch_id,
+                                    'state_dict': dcnn_model.state_dict(),
+                                    'best_prec1': 0.},
+                            False, dcnn_model.__class__.__name__)
+            # save exper statistics
+            exper.save()
         end_time = time.time()
         total_time = end_time - start_time
-        exper.logger.info("End epoch {}: duration {:.2f} seconds".format(epoch_id + 1, total_time))
+        exper.logger.info("End epoch {}: mean loss: {:.3f} / duration {:.2f} seconds".format(exper.epoch_id + 1,
+                                                                                             exper.epoch_stats["mean_loss"][
+                                                                                                 epoch_id],
+                                                                                             total_time))
     del dataset
     del dcnn_model
 

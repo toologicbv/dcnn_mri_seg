@@ -1,8 +1,8 @@
 import argparse
-import sys
 import torch
 
 from utils.config import config
+from common import datestr
 
 
 def do_parse_args():
@@ -19,7 +19,7 @@ def do_parse_args():
                         help='input batch size for training (default: 64)')
     parser.add_argument('--epochs', type=int, default=10, metavar='N',
                         help='number of epochs to train (default: 10)')
-    parser.add_argument('--lr', type=float, default=0.0001, metavar='LR',
+    parser.add_argument('--lr', type=float, default=0.001, metavar='LR',
                         help='learning rate (default: 0.0001)')
     parser.add_argument('--lr_mode', type=str, default='step')
     parser.add_argument('--momentum', type=float, default=0.9, metavar='M',
@@ -29,6 +29,7 @@ def do_parse_args():
 
     parser.add_argument('--bn_sync', action='store_true')
     parser.add_argument('--retrain', action='store_true')
+    parser.add_argument('--chkpnt', action='store_true')
 
     args = parser.parse_args()
     args.cuda = args.use_cuda and torch.cuda.is_available()

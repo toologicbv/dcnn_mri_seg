@@ -66,9 +66,7 @@ def rescale_image(img, perc_low=5, perc_high=95, axis=None):
 
 
 def normalize_image(img, axis=None):
-    print("Before ", np.mean(img, axis=axis))
     img = (img - np.mean(img, axis=axis)) / np.std(img, axis=axis)
-    print("After ", np.mean(img, axis=axis))
     return img
 
 
@@ -358,10 +356,9 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
             # PAD IMAGE
             for rots in range(4):
                 # no padding here but when we extract patches during BatchGeneration
-                # section = np.pad(img_slice, pad_size, 'constant', constant_values=(0,)).astype(
-                #    HVSMR2016CardiacMRI.pixel_dta_type)
-                # self.images.append(section)
-                self.images.append(img_slice)
+                section = np.pad(img_slice, pad_size, 'constant', constant_values=(0,)).astype(
+                    HVSMR2016CardiacMRI.pixel_dta_type)
+                self.images.append(section)
                 self.labels.append(lbl_slice)
                 # if save:
                 #    lbl_slice_padded = np.pad(lbl_slice, pad_size, 'constant', constant_values=(0,)).astype(
