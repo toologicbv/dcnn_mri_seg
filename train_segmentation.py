@@ -24,9 +24,10 @@ def training(exper):
 
     dataset = HVSMR2016CardiacMRI(data_dir=exper.config.data_dir,
                                   search_mask=exper.config.dflt_image_name + ".nii",
-                                  norm_scale="normalize", load_type="numpy")
+                                  norm_scale=exper.config.norm_method, load_type="numpy",
+                                  val_fold=exper.run_args.val_fold_id)
 
-    dcnn_model = load_model(exper, simple=True)
+    dcnn_model = load_model(exper, simple=False)
     exper.optimizer = OPTIMIZER_DICT[exper.config.optimizer](dcnn_model.parameters(), lr=exper.run_args.lr)
 
     exper.batches_per_epoch = 2
@@ -42,7 +43,7 @@ def training(exper):
             new_batch.generate_batch_2d(dataset.images, dataset.labels)
 
             # print("new_batch.b_images", new_batch.b_images.shape)
-            b_out, b_out_softmax = dcnn_model(new_batch.b_images)
+            b_out = dcnn_model(new_batch.b_images)
             b_loss = dcnn_model.get_loss(b_out, new_batch.b_labels)
             # compute gradients w.r.t. model parameters
             b_loss.backward(retain_graph=False)
@@ -52,6 +53,18 @@ def training(exper):
             dcnn_model.zero_grad()
 
         exper.epoch_stats["mean_loss"][epoch_id] *= 1./float(exper.batches_per_epoch)
+        if exper.run_args.val_freq != 0 and exper.epoch_id % exper.run_args.val_freq == 0:
+            # validate model
+            val_batch = TwoDimBatchHandler(exper)
+            val_batch.generate_batch_2d(dataset.val_images, dataset.val_labels)
+            dcnn_model.eval()
+            b_out = dcnn_model(val_batch.b_images)
+            val_loss = dcnn_model.get_loss(b_out, val_batch.b_labels)
+            val_loss = val_loss.data.cpu().squeeze().numpy()[0]
+            exper.val_stats["mean_loss"] = val_loss
+            exper.logger.info("Epoch {}: current validation loss {:.3f}".format(exper.epoch_id, val_loss))
+            dcnn_model.train()
+
         if exper.run_args.chkpnt and (exper.epoch_id % 100 == 0 or exper.epoch_id == exper.run_args.epochs):
             save_checkpoint(exper, {'epoch': exper.epoch_id,
                                     'state_dict': dcnn_model.state_dict(),
@@ -61,10 +74,11 @@ def training(exper):
             exper.save()
         end_time = time.time()
         total_time = end_time - start_time
-        exper.logger.info("End epoch {}: mean loss: {:.3f} / duration {:.2f} seconds".format(exper.epoch_id + 1,
-                                                                                             exper.epoch_stats["mean_loss"][
-                                                                                                 epoch_id],
-                                                                                             total_time))
+        exper.logger.info("End epoch {}: mean loss: {:.3f} / duration {:.2f} seconds".format(
+            exper.epoch_id,
+            exper.epoch_stats["mean_loss"][
+            epoch_id],
+            total_time))
     del dataset
     del dcnn_model
 
@@ -91,7 +105,7 @@ def trainingv2(exper):
             if exper.run_args.cuda:
                 b_images = b_images.cuda()
                 b_labels = b_labels.cuda()
-            b_out, b_out_softmax = dcnn_model(b_images)
+            b_out = dcnn_model(b_images)
             b_loss = dcnn_model.get_loss(b_out, b_labels)
             # compute gradients w.r.t. model parameters
             b_loss.backward(retain_graph=False)
@@ -111,7 +125,7 @@ def trainingv2(exper):
 def main():
     args = do_parse_args()
 
-    exper = Experiment(config, run_args=args)
+    exper = Experiment(config, run_args=args, set_seed=True)
     exper.start()
     print_flags(exper)
 

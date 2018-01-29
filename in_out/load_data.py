@@ -7,7 +7,7 @@ if "/home/jogi/.local/lib/python2.7/site-packages" in sys.path:
     sys.path.remove("/home/jogi/.local/lib/python2.7/site-packages")
 
 import matplotlib.pyplot as plt
-# from matplotlib import cm
+from sklearn.model_selection import KFold
 
 from torch.utils.data import Dataset
 from utils.config import config
@@ -237,10 +237,11 @@ class LASunnyBrooksMRI(BaseImageDataSet):
 class HVSMR2016CardiacMRI(BaseImageDataSet):
 
     pixel_dta_type = 'float32'
-    pad_size = 65
+    pad_size = config.pad_size
 
     def __init__(self, data_dir, search_mask=None, nclass=3, transform=False, conf_obj=None,
-                 load_func=load_mhd_to_numpy, norm_scale="normalize", mode="train", load_type="raw"):
+                 load_func=load_mhd_to_numpy, norm_scale="normalize", mode="train", load_type="raw",
+                 kfold=5, val_fold=1):
         """
         The images are already resampled to an isotropic 3D size of 0.65mm x 0.65 x 0.65
 
@@ -255,6 +256,8 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
         :param mode: takes "train", "test", "valid"
         """
         super(HVSMR2016CardiacMRI, self).__init__(data_dir, conf_obj)
+        self.kfold = kfold
+        self.val_fold = val_fold
         self.transform = transform
         self.norm_scale = norm_scale
         self.search_mask = search_mask
@@ -264,11 +267,16 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
         # Note, this list will contain len() image slices...2D!
         self.images = []
         self.labels = []
+        self.val_images = []
+        self.val_labels = []
         self.origins = []
         self.spacings = []
         self.no_class = nclass
         self.class_count = np.zeros(self.no_class)
+        self.val_image_indices =  self._prepare_cross_validation()
+        # print("Validation indices {}".format(self.val_image_indices))
         if self.load_type == "raw":
+            # Important detail: we need to swap axis 0 and 2 of the HVSMR2016 files
             self.load_images_from_dir(swap_axis=True)
         elif self.load_type == "numpy":
             self.load_numpy_arr_from_dir()
@@ -281,6 +289,11 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
     def __getitem__(self, index):
         assert index <= self.__len__()
         return tuple((self.images[index], self.labels[index]))
+
+    def _prepare_cross_validation(self):
+        folds = KFold(n_splits=self.kfold)
+        fold_arrays = [val_set for _, val_set in folds.split(np.arange(10))]
+        return fold_arrays[self.val_fold]
 
     def _get_file_lists(self):
 
@@ -319,12 +332,12 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
                 mri_scan = np.swapaxes(mri_scan, 0, 2)
 
             if self.norm_scale == "normalize":
-                print("> > > Info - Normalizing images intensity values")
+                # print("> > > Info - Normalizing images intensity values")
                 mri_scan = normalize_image(mri_scan, axis=None)
 
             elif self.norm_scale == "rescale":
                 mri_scan = rescale_image(mri_scan, axis=None)
-                print("> > > Info - Rescaling images intensity values")
+                # print("> > > Info - Rescaling images intensity values")
             else:
                 # no rescaling or normalization
                 print("> > > Info - No rescaling or normalization applied to image!")
@@ -338,12 +351,15 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
             for class_label in range(self.no_class):
                 self.class_count[class_label] += np.sum(label == class_label)
             # augment the image with additional rotated slices
-
-            self._augment_data(mri_scan, label, pad_size=HVSMR2016CardiacMRI.pad_size)
+            if i in self.val_image_indices:
+                val_set = True
+            else:
+                val_set = False
+            self._augment_data(mri_scan, label, pad_size=HVSMR2016CardiacMRI.pad_size, isval=val_set)
 
             files_loaded += 1
 
-    def _augment_data(self, image, label, pad_size=0, c_count=0):
+    def _augment_data(self, image, label, pad_size=0, isval=False):
         """
         Adds all original and rotated image slices to self.images and self.labels objects
         :param image:
@@ -352,14 +368,18 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
         :return:
         """
 
-        def rotate_slice(img_slice, lbl_slice, save=False):
+        def rotate_slice(img_slice, lbl_slice, isval=False):
             # PAD IMAGE
             for rots in range(4):
                 # no padding here but when we extract patches during BatchGeneration
                 section = np.pad(img_slice, pad_size, 'constant', constant_values=(0,)).astype(
                     HVSMR2016CardiacMRI.pixel_dta_type)
-                self.images.append(section)
-                self.labels.append(lbl_slice)
+                if not isval:
+                    self.images.append(section)
+                    self.labels.append(lbl_slice)
+                else:
+                    self.val_images.append(section)
+                    self.val_labels.append((lbl_slice))
                 # if save:
                 #    lbl_slice_padded = np.pad(lbl_slice, pad_size, 'constant', constant_values=(0,)).astype(
                 #                              HVSMR2016CardiacMRI.pixel_dta_type)
@@ -370,21 +390,20 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
                 lbl_slice = np.rot90(lbl_slice)
 
         # for each image-slice rotate the img four times. We're doing that for all three orientations
-        found = False
         for z in range(image.shape[2]):
             label_slice = label[:, :, z]
             image_slice = image[:, :, z]
-            rotate_slice(image_slice, label_slice)
+            rotate_slice(image_slice, label_slice, isval)
 
         for y in range(image.shape[1]):
             label_slice = np.squeeze(label[:, y, :])
             image_slice = np.squeeze(image[:, y, :])
-            rotate_slice(image_slice, label_slice)
+            rotate_slice(image_slice, label_slice, isval)
 
         for x in range(image.shape[0]):
             label_slice = np.squeeze(label[x, :, :])
             image_slice = np.squeeze(image[x, :, :])
-            rotate_slice(image_slice, label_slice)
+            rotate_slice(image_slice, label_slice, isval)
 
     def load_numpy_arr_from_dir(self, file_prefix=None, abs_path=None):
         if file_prefix is None:
@@ -440,9 +459,12 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
             raise IOError("Can't save {}".format(filename))
 
 
-# dataset = HVSMR2016CardiacMRI(data_dir=config.data_dir, search_mask=config.dflt_image_name + ".nii",
-#                              norm_scale="normalize", load_type="numpy")
+dataset = HVSMR2016CardiacMRI(data_dir="/home/jorg/repository/dcnn_mri_seg/data/HVSMR2016/",
+                              search_mask=config.dflt_image_name + ".nii",
+                              norm_scale="normalize", load_type="numpy")
 # print("Length data set {}/{}".format(dataset.__len__(), len(dataset.labels)))
 # dataset.save_to_numpy()
-# del dataset
+print("train set len {}".format(len(dataset.images)))
+print("validation set len {}".format(len(dataset.val_images)))
+del dataset
 

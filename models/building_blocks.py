@@ -21,12 +21,13 @@ class Basic2DCNNBlock(nn.Module):
             print(">>> apply non linearity <<<")
             self.non_linearity = nn.ELU()
         if self.apply_batch_norm:
+            print(">>> apply batch-normalization <<<")
             self.bn = nn.BatchNorm2d(out_channels)
         if self.apply_dropout:
             print(">>> apply dropout <<<")
             self.layer_drop = nn.Dropout2d(p=prob_dropout)
 
-        self.reset_weights()
+        # self.reset_weights()
 
     def reset_weights(self):
         init.xavier_normal(self.conv_layer.weight.data)

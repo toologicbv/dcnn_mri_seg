@@ -18,8 +18,8 @@ class BaseDilated2DCNN(nn.Module):
         self.model = self._build_dcnn()
         # we're using CrossEntropyLoss. Implementation of PyTorch combines it with Softmax and hence
         # not need to incorporate Softmax layer in NN
-        self.output = self.architecture['output']()
-        self.loss_func = self.architecture['loss_function']()
+        self.log_softmax = self.architecture['output'](dim=1)
+        self.loss_function = self.architecture['loss_function']()
         if self.use_cuda:
             self.cuda()
 
@@ -56,18 +56,28 @@ class BaseDilated2DCNN(nn.Module):
 
         out = self.model(input)
 
-        out_softmax = self.output(out.view(-1, out.size(1)))
+        out = self.log_softmax(out)
         # dim parameter in softmax only works in new PyTorch version 0.4.0
         # out_softmax = self.output(input.view(-1, input.size(1), dim=input.size(1)))
         # we want to compute loss and analyse the segmentation predictions. PyTorch loss function CrossEntropy
         # combines softmax with log operation. Hence for loss calculation we need the raw output aka logits
         # without having them passed through the softmax non-linearity
-        return out, out_softmax
+        return out
 
     def get_loss(self, predictions, labels):
         # we need to reshape the tensors because CrossEntropy expects 2D tensor (N, C) where C is num of classes
         # the input tensor is in our case [batch_size, num_of_classes, height, width]
         # the labels are                  [batch_size, 1, height, width]
+        labels = labels.view(labels.size(0), labels.size(2), labels.size(3))
+        # print("Loss sizes ", predictions.size(), labels.size())
+        return self.loss_function(predictions, labels)
+
+    def get_loss_v1(self, predictions, labels):
+        # we need to reshape the tensors because CrossEntropy expects 2D tensor (N, C) where C is num of classes
+        # the input tensor is in our case [batch_size, num_of_classes, height, width]
+        # the labels are                  [batch_size, 1, height, width]
+        #
+        # THIS THING DIDN'T WORK UNFORTUNATELY
         predictions = predictions.view(-1, predictions.size(1))
         labels = labels.view(-1)
         # print("Loss sizes ", input.size(), labels.size())
@@ -154,7 +164,7 @@ class DilatedCNN(nn.Module):
         out = self.layer_drop9(out)
         out = self.layer10(out)
         out = self.log_softmax(out)
-        return out, None
+        return out
 
     def get_loss(self, predictions, labels):
         # we need to reshape the tensors because CrossEntropy expects 2D tensor (N, C) where C is num of classes

@@ -4,13 +4,13 @@ import torch.nn as nn
 DEFAULT_DCNN_2D = {'num_of_layers': 10,
                    'kernels': [3, 3, 3, 3, 3, 3, 3, 3, 1, 1],
                    'channels': [32, 32, 32, 32, 32, 32, 32, 32, 192, 3],  # NOTE: last channel is num_of_classes
-                   'dilation': [1, 1, 2, 4, (8, 8), (16, 16), (32, 32), (1, 1), (1, 1), (1, 1)],
+                   'dilation': [1, 1, 2, 4, 8, 16, 32, 1, 1, 1],
                    'stride': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                    'batch_norm': [False, False, False, False, False, False, False, True, True, False],
                    'non_linearity': [True, True, True, True, True, True, True, True, True, False],
                    'dropout': [0., 0., 0., 0., 0., 0., 0., 0.5, 0.5, 0.],
-                   'loss_function': nn.CrossEntropyLoss,
-                   'output': nn.Softmax
+                   'loss_function': nn.NLLLoss2d,
+                   'output': nn.LogSoftmax
                    }
 
 
@@ -37,6 +37,12 @@ class BaseConfig(object):
 
         # optimizer
         self.optimizer = "adam"
+
+        # normalization method "normalize or rescaling"
+        self.norm_method = "normalize"
+
+        # padding to left and right of the image in order to reach the final image size for classification
+        self.pad_size = 65
 
     def get_rootpath(self):
         return os.environ.get("REPO_PATH", os.environ.get('HOME'))

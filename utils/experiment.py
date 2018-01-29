@@ -1,50 +1,17 @@
 import torch
 import numpy as np
-import argparse
 import os
 from datetime import datetime
 from pytz import timezone
 import dill
-from config import config
+from common.parsing import create_def_argparser, run_dict
 
 from common.common import create_logger, create_exper_label
 
 
-run_dict = {'cmd': 'train',
-            'model': "dcnn",
-            'version': "v1",
-            'data_dir': config.data_dir,
-            'use_cuda': True,
-            'epochs': 1,
-            'batch_size': 2,
-            'lr': 1e-4,
-            'retrain': False,
-            'log_dir': None,
-            'chkpnt': False
-}
-
-
-def create_def_argparser(**kwargs):
-
-    args = argparse.Namespace()
-    args.cmd = kwargs['cmd']
-    args.model = kwargs['model']
-    args.version = kwargs['version']
-    args.data_dir = kwargs['data_dir']
-    args.use_cuda = kwargs['use_cuda']
-    args.epochs = kwargs['epochs']
-    args.batch_size = kwargs['batch_size']
-    args.lr = kwargs['lr']
-    args.retrain = kwargs['retrain']
-    args.log_dir = kwargs['log_dir']
-    args.cuda = args.use_cuda and torch.cuda.is_available()
-    args.chkpnt = os.path.join(config.checkpoint_path, "default.tar")
-    return args
-
-
 class Experiment(object):
 
-    def __init__(self, config, run_args=None, set_seed=False):
+    def __init__(self, config, run_args=None, set_seed=True):
 
         # logging
         self.epoch_id = 0
@@ -60,6 +27,7 @@ class Experiment(object):
             self.run_args = run_args
         self.config = config
         self.epoch_stats = None
+        self.val_stats = None
         self._set_path()
         self.init_statistics()
 
@@ -71,7 +39,9 @@ class Experiment(object):
             np.random.seed(SEED)
 
     def init_statistics(self):
+        val_runs = (self.run_args.epochs // self.run_args.val_freq) + 1
         self.epoch_stats = {'mean_loss': np.zeros(self.run_args.epochs)}
+        self.val_stats = {'mean_loss': np.zeros(val_runs)}
 
     def start(self, exper_logger=None):
 
