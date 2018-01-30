@@ -29,6 +29,7 @@ class Experiment(object):
         self.epoch_stats = None
         self.val_stats = None
         self._set_path()
+        self.num_val_runs = 0
         self.init_statistics()
 
         if set_seed:
@@ -39,9 +40,9 @@ class Experiment(object):
             np.random.seed(SEED)
 
     def init_statistics(self):
-        val_runs = (self.run_args.epochs // self.run_args.val_freq) + 1
+        self.num_val_runs = (self.run_args.epochs // self.run_args.val_freq) + 1
         self.epoch_stats = {'mean_loss': np.zeros(self.run_args.epochs)}
-        self.val_stats = {'mean_loss': np.zeros(val_runs)}
+        self.val_stats = {'mean_loss': np.zeros((self.num_val_runs, 2))}
 
     def start(self, exper_logger=None):
 

@@ -3,6 +3,7 @@ import os
 import glob
 import torch
 from torch.autograd import Variable
+import numpy as np
 
 from common.parsing import do_parse_args
 from common.common import print_flags, OPTIMIZER_DICT
@@ -33,7 +34,7 @@ def training(exper):
     exper.batches_per_epoch = 2
     exper.logger.info("Size data-set {} // number of epochs {} // batch-size {} // batches/epoch {}".format(
         dataset.__len__(), exper.run_args.epochs, exper.run_args.batch_size, exper.batches_per_epoch))
-
+    num_val_runs = 0
     for epoch_id in range(exper.run_args.epochs):
         exper.epoch_id += 1
         start_time = time.time()
@@ -53,16 +54,19 @@ def training(exper):
             dcnn_model.zero_grad()
 
         exper.epoch_stats["mean_loss"][epoch_id] *= 1./float(exper.batches_per_epoch)
-        if exper.run_args.val_freq != 0 and exper.epoch_id % exper.run_args.val_freq == 0:
+        if exper.run_args.val_freq != 0 and (exper.epoch_id % exper.run_args.val_freq == 0 or
+                                             exper.epoch_id == exper.run_args.epochs):
             # validate model
+            num_val_runs += 1
             val_batch = TwoDimBatchHandler(exper)
             val_batch.generate_batch_2d(dataset.val_images, dataset.val_labels)
             dcnn_model.eval()
             b_out = dcnn_model(val_batch.b_images)
             val_loss = dcnn_model.get_loss(b_out, val_batch.b_labels)
             val_loss = val_loss.data.cpu().squeeze().numpy()[0]
-            exper.val_stats["mean_loss"] = val_loss
-            exper.logger.info("Epoch {}: current validation loss {:.3f}".format(exper.epoch_id, val_loss))
+            # store epochID and validation loss
+            exper.val_stats["mean_loss"][num_val_runs-1] = np.array([exper.epoch_id, val_loss])
+            exper.logger.info("Model validation in epoch {}: current loss {:.3f}".format(exper.epoch_id, val_loss))
             dcnn_model.train()
 
         if exper.run_args.chkpnt and (exper.epoch_id % 100 == 0 or exper.epoch_id == exper.run_args.epochs):
