@@ -46,20 +46,20 @@ def dice_coeff(pred_scores, pred_labels, true_labels):
         np_pred_labels = pred_labels.data.cpu().squeeze().numpy()
 
     eps = 0.000001
-    precision, recall, thresholds = precision_recall_curve(np_true_labels, np_preds)
+    # precision, recall, thresholds = precision_recall_curve(np_true_labels, np_preds)
     dice = f1_score(np_true_labels, np_pred_labels)
-    union = precision + recall + 2*eps
-    intersect = precision * recall
+    # union = precision + recall + 2*eps
+    # intersect = precision * recall
     # make sure
-    intersect[intersect <= eps] = eps
+    # intersect[intersect <= eps] = eps
     # the target volume can be empty - so we still want to
     # end up with a score of 1 if the result is 0/0
-    IoU = intersect / union
-    IoU[np.isnan(IoU)] = 0
-    dice_scores = 2 * IoU
+    # IoU = intersect / union
+    # IoU[np.isnan(IoU)] = 0
+    # dice_scores = 2 * IoU
     # print('Maximum Dice ' + str(np.max(dice_scores)))
     # print('Threshold ' + str(thresholds[np.argmax(dice_scores)]))
     # print('Dice at threshold 0.5 ' + str(dice_scores[np.argmin(abs(thresholds-0.5))]))
-    dice_at_threshold = dice_scores[np.argmin(abs(thresholds-0.5))]
-
+    # dice_at_threshold = dice_scores[np.argmin(abs(thresholds-0.5))]
+    dice_at_threshold = []
     return dice_at_threshold, dice
