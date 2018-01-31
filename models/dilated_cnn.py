@@ -56,12 +56,13 @@ class BaseDilated2DCNN(nn.Module):
             raise ValueError("input is not of type torch.autograd.variable.Variable")
 
         out = self.model(input)
-        if self.training:
-            out = self.log_softmax(out)
-        else:
-            # during testing we don't want the LogSoftmax but Softmax in order to compute
-            # the dice coefficient with sklearn function which expects probabilities.
-            out = self.test_function(out)
+        out = self.test_function(out)
+        # if self.training:
+        #     out = self.log_softmax(out)
+        # else:
+        #     # during testing we don't want the LogSoftmax but Softmax in order to compute
+        #     # the dice coefficient with sklearn function which expects probabilities.
+        #     out = self.test_function(out)
 
         return out
 
@@ -69,9 +70,10 @@ class BaseDilated2DCNN(nn.Module):
         # we need to reshape the tensors because CrossEntropy expects 2D tensor (N, C) where C is num of classes
         # the input tensor is in our case [batch_size, num_of_classes, height, width]
         # the labels are                  [batch_size, 1, height, width]
-        if not self.training:
+        # if not self.training:
             # need to apply Log function because in test-mode the output of CNN is softmax (see above)
-            predictions = torch.log(predictions)
+            # predictions = torch.log(predictions)
+        predictions = torch.log(predictions)
         labels = labels.view(labels.size(0), labels.size(2), labels.size(3))
         # print("Loss sizes ", predictions.size(), labels.size())
         return self.loss_function(predictions, labels)

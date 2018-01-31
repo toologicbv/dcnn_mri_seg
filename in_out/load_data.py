@@ -272,6 +272,8 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
         self.labels = []
         self.val_images = []
         self.val_labels = []
+        self.test_images = []
+        self.test_labels = []
         self.origins = []
         self.spacings = []
         self.no_class = nclass
@@ -388,14 +390,15 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
                 else:
                     self.val_images.append(section)
                     self.val_labels.append((lbl_slice))
-                # if save:
-                #    lbl_slice_padded = np.pad(lbl_slice, pad_size, 'constant', constant_values=(0,)).astype(
-                #                              HVSMR2016CardiacMRI.pixel_dta_type)
-                #    write_numpy_to_image(section, "/home/jorg/tmp/images/y_rot_img" + str(rots+1) + ".nii")
-                #    write_numpy_to_image(lbl_slice_padded, "/home/jorg/tmp/images/y_rot_lbl" + str(rots + 1) + ".nii")
+
                 # rotate for next iteration
                 img_slice = np.rot90(img_slice)
                 lbl_slice = np.rot90(lbl_slice)
+
+        if isval:
+            # store the complete image for testing as well
+            self.test_images.append(image)
+            self.test_labels.append(label)
 
         # for each image-slice rotate the img four times. We're doing that for all three orientations
         for z in range(image.shape[2]):
@@ -483,12 +486,12 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
             return dices
 
 
-dataset = HVSMR2016CardiacMRI(data_dir="/home/jorg/repository/dcnn_mri_seg/data/HVSMR2016/",
-                              search_mask=config.dflt_image_name + ".nii",
-                              norm_scale="normalize", load_type="numpy")
+# dataset = HVSMR2016CardiacMRI(data_dir="/home/jorg/repository/dcnn_mri_seg/data/HVSMR2016/",
+#                              search_mask=config.dflt_image_name + ".nii",
+#                              norm_scale="normalize", load_type="numpy")
 # print("Length data set {}/{}".format(dataset.__len__(), len(dataset.labels)))
 # dataset.save_to_numpy()
-print("train set len {}".format(len(dataset.images)))
-print("validation set len {}".format(len(dataset.val_images)))
-del dataset
+# print("train set len {}".format(len(dataset.images)))
+# print("validation set len {}".format(len(dataset.val_images)))
+# del dataset
 

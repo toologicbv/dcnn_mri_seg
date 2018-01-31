@@ -48,17 +48,6 @@ def create_logger(exper=None, file_handler=False, output_dir=None):
     return logger
 
 
-def print_flags(exper):
-    """
-    Prints all entries in argument parser.
-    """
-    for key, value in vars(exper.run_args).items():
-        exper.logger.info(key + ' : ' + str(value))
-
-    if exper.run_args.cuda:
-        exper.logger.info(" *** RUNNING ON GPU *** ")
-
-
 def create_exper_label(exper):
 
     # retrain = "_retrain" if exper.args.retrain else ""

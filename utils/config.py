@@ -24,6 +24,7 @@ class BaseConfig(object):
         self.data_dir = os.path.join(self.root_dir, "data/HVSMR2016/")
         self.log_root_path = "logs"
         self.figure_path = "figures"
+        self.stats_path = "stats"
         self.checkpoint_path = "checkpoints"
         self.logger_filename = "run_out.log"
         # standard image name

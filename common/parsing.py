@@ -17,7 +17,8 @@ run_dict = {'cmd': 'train',
             'log_dir': None,
             'chkpnt': False,
             'val_fold_id': 1,
-            'val_freq': 10
+            'val_freq': 10,
+            'chkpnt_freq': 10
 }
 
 
@@ -36,6 +37,8 @@ def create_def_argparser(**kwargs):
     args.log_dir = kwargs['log_dir']
     args.val_fold_id = kwargs['val_fold_id']
     args.val_freq = kwargs['val_freq']
+    args.val_freq = kwargs['chkpnt_freq']
+
     args.cuda = args.use_cuda and torch.cuda.is_available()
     args.chkpnt = os.path.join(config.checkpoint_path, "default.tar")
     return args
@@ -71,6 +74,9 @@ def do_parse_args():
     parser.add_argument('--bn_sync', action='store_true')
     parser.add_argument('--retrain', action='store_true')
     parser.add_argument('--chkpnt', action='store_true')
+    parser.add_argument('--chkpnt_freq', type=int, default=100, metavar='N',
+                        help='Checkpoint frequency (saving model state) (default: 100)')
+
 
     args = parser.parse_args()
     args.cuda = args.use_cuda and torch.cuda.is_available()

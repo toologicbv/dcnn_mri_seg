@@ -111,3 +111,35 @@ class TwoDimBatchHandler(BatchHandler):
                     lbl = np.pad(cls_lbl, 65, 'constant', constant_values=(0,)).astype("float32")
                     write_numpy_to_image(lbl, filename=filename_lbl)
 
+
+class TestHandler(object):
+
+    def __init__(self, image, is_cuda=False, num_of_classes=3):
+        """
+            Input is an image passed as 3D numpy array  [x, y, z] axis
+            Currently assuming that image is already scaled to isotropic size of 0.65 mm in all dimensions
+            and that intensity values are normalized
+
+        """
+        self.image = image
+        self.cuda = is_cuda
+        self.num_of_classes = num_of_classes
+
+    def __call__(self, exper_hdl, model):
+        outim = np.zeros((self.num_of_classes, self.image.shape[0], self.image.shape[1], self.image.shape[2]))
+        recp_fld = 2 * exper_hdl.exper.config.pad_size + 1
+        aximage = np.pad(self.image,
+                         ((exper_hdl.exper.config.pad_size, exper_hdl.exper.config.pad_size),
+                          (exper_hdl.exper.config.pad_size, exper_hdl.exper.config.pad_size),
+                                 (0, 0)), 'constant', constant_values=(0,)).astype('float32')
+        # iterate over the axial image slices
+        for z in range(self.image.shape[2]):
+            imslice = np.squeeze(aximage[:, :, z])
+            out = pred_fn((floatX(batch)))
+                # print(out.shape)
+                # print(out[0].shape)
+                for bi in range(bs):
+                    if (z + 1) - bs + bi < image.shape[2]:
+                        outs = np.squeeze(out[bi])
+                        outim[:, :, :, (z + 1) - bs + bi] += outs
+                        axi_outim[:, :, :, (z + 1) - bs + bi] += outs

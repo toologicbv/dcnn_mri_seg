@@ -1,3 +1,4 @@
+import sys
 import torch
 import numpy as np
 import os
@@ -7,6 +8,65 @@ import dill
 from common.parsing import create_def_argparser, run_dict
 
 from common.common import create_logger, create_exper_label
+from utils.config import config
+
+
+class ExperimentHandler(object):
+
+    def __init__(self, exper, logger=None):
+
+        self.exper = exper
+        self.logger = None
+        if logger is None:
+            self.logger = create_logger(self.exper, file_handler=True)
+        else:
+            self.logger = logger
+
+    def next_epoch(self):
+        self.exper.epoch_id += 1
+
+    def save_experiment(self, file_name=None):
+
+        if file_name is None:
+            file_name = "exper_stats@{}".format(self.exper.epoch_id) + ".dll"
+
+        outfile = os.path.join(self.exper.stats_path, file_name)
+        with open(outfile, 'wb') as f:
+            dill.dump(self.exper, f)
+
+        if self.logger is not None:
+            self.logger.info("Epoch: {} - Saving experimental details to {}".format(self.exper.epoch_id, outfile))
+
+    def print_flags(self):
+        """
+        Prints all entries in argument parser.
+        """
+        for key, value in vars(self.exper.run_args).items():
+            self.logger.info(key + ' : ' + str(value))
+
+        if self.exper.run_args.cuda:
+            self.logger.info(" *** RUNNING ON GPU *** ")
+
+    @staticmethod
+    def load_experiment(path_to_exp, full_path=False):
+
+        if not full_path:
+            path_to_exp = os.path.join(config.root_dir, os.path.join(config.log_root_path , path_to_exp))
+
+        print("Load from {}".format(path_to_exp))
+        try:
+            with open(path_to_exp, 'rb') as f:
+                experiment = dill.load(f)
+
+        except IOError as e:
+            print "I/O error({0}): {1}".format(e.errno, e.strerror)
+            print("Can't open file {}".format(path_to_exp))
+            raise IOError
+        except:
+            print "Unexpected error:", sys.exc_info()[0]
+            raise
+
+        return experiment
 
 
 class Experiment(object):
@@ -28,6 +88,7 @@ class Experiment(object):
         self.config = config
         self.epoch_stats = None
         self.val_stats = None
+        self.stats_path = None
         self._set_path()
         self.num_val_runs = 0
         self.init_statistics()
@@ -40,17 +101,19 @@ class Experiment(object):
             np.random.seed(SEED)
 
     def init_statistics(self):
-        self.num_val_runs = (self.run_args.epochs // self.run_args.val_freq) + 1
+        self.num_val_runs = (self.run_args.epochs // self.run_args.val_freq)
+        if self.run_args.epochs % self.run_args.val_freq == 0:
+            pass
+        else:
+            # one extra run because max epoch is not divided by val_freq
+            self.num_val_runs += 1
         self.epoch_stats = {'mean_loss': np.zeros(self.run_args.epochs)}
         self.val_stats = {'mean_loss': np.zeros((self.num_val_runs, 2)),
                           'dice_coeff': np.zeros((self.num_val_runs, 3))}
 
     def start(self, exper_logger=None):
 
-        if exper_logger is None:
-            self.logger = create_logger(self, file_handler=True)
-        else:
-            self.logger = exper_logger
+        pass
 
     def _set_path(self):
         if self.run_args.log_dir is None:
@@ -68,25 +131,12 @@ class Experiment(object):
             os.makedirs(log_dir)
             fig_path = os.path.join(log_dir, self.config.figure_path)
             os.makedirs(fig_path)
+            # make directory for exper statistics
+            self.stats_path = os.path.join(log_dir, self.config.stats_path)
+            os.makedirs(self.stats_path)
             if self.run_args.chkpnt:
                 self.chkpnt_dir = os.path.join(log_dir, self.config.checkpoint_path)
                 os.makedirs(self.chkpnt_dir)
         self.output_dir = log_dir
 
-    def save(self, file_name=None):
-        if file_name is None:
-            file_name = "exper_stats@{}".format(self.epoch_id) + ".dll"
 
-        outfile = os.path.join(self.output_dir, file_name)
-        logger = self.logger
-        optimizer = self.optimizer
-        self.logger = None
-        self.optimizer = None
-
-        with open(outfile, 'wb') as f:
-            dill.dump(self, f)
-        self.logger = logger
-        self.optimizer = optimizer
-
-        if self.logger is not None:
-            self.logger.info("Epoch: {} - Saving experimental details to {}".format(self.epoch_id, outfile))
