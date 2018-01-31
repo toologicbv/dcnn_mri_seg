@@ -11,6 +11,7 @@ from sklearn.model_selection import KFold
 
 from torch.utils.data import Dataset
 from utils.config import config
+from losses.dice_metric import dice_coeff
 
 
 def write_numpy_to_image(np_array, filename):
@@ -238,6 +239,8 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
 
     pixel_dta_type = 'float32'
     pad_size = config.pad_size
+    label_myocardium = 1
+    label_bloodpool = 2
 
     def __init__(self, data_dir, search_mask=None, nclass=3, transform=False, conf_obj=None,
                  load_func=load_mhd_to_numpy, norm_scale="normalize", mode="train", load_type="raw",
@@ -359,6 +362,11 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
 
             files_loaded += 1
 
+        if len(self.val_images) == 0:
+            samples = int(0.1 * len(self.images))
+            self.val_images = self.images[0:samples]
+            self.val_labels = self.labels[0:samples]
+
     def _augment_data(self, image, label, pad_size=0, isval=False):
         """
         Adds all original and rotated image slices to self.images and self.labels objects
@@ -457,6 +465,22 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
                     break
         except IOError:
             raise IOError("Can't save {}".format(filename))
+
+    @staticmethod
+    def compute_accuracy(predictions, labels, classes=None):
+        if classes is None:
+            classes = [HVSMR2016CardiacMRI.label_myocardium, HVSMR2016CardiacMRI.label_bloodpool]
+
+        dices = []
+        for cls in classes:
+            pred_scores, pred_labels = predictions.max(1)
+            cls_labels = labels == cls
+            dices.append(dice_coeff(pred_scores.view(-1), cls_labels.view(-1)))
+
+        if len(dices) == 1:
+            return dices[0]
+        else:
+            return dices
 
 
 dataset = HVSMR2016CardiacMRI(data_dir="/home/jorg/repository/dcnn_mri_seg/data/HVSMR2016/",

@@ -42,7 +42,8 @@ class Experiment(object):
     def init_statistics(self):
         self.num_val_runs = (self.run_args.epochs // self.run_args.val_freq) + 1
         self.epoch_stats = {'mean_loss': np.zeros(self.run_args.epochs)}
-        self.val_stats = {'mean_loss': np.zeros((self.num_val_runs, 2))}
+        self.val_stats = {'mean_loss': np.zeros((self.num_val_runs, 2)),
+                          'dice_coeff': np.zeros((self.num_val_runs, 3))}
 
     def start(self, exper_logger=None):
 

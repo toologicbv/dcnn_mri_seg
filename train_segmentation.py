@@ -61,12 +61,17 @@ def training(exper):
             val_batch = TwoDimBatchHandler(exper)
             val_batch.generate_batch_2d(dataset.val_images, dataset.val_labels)
             dcnn_model.eval()
-            b_out = dcnn_model(val_batch.b_images)
-            val_loss = dcnn_model.get_loss(b_out, val_batch.b_labels)
+            b_predictions = dcnn_model(val_batch.b_images)
+            val_loss = dcnn_model.get_loss(b_predictions, val_batch.b_labels)
             val_loss = val_loss.data.cpu().squeeze().numpy()[0]
+            # compute dice score for both classes (myocardium and bloodpool)
+            dice = HVSMR2016CardiacMRI.compute_accuracy(b_predictions, val_batch.b_labels)
             # store epochID and validation loss
             exper.val_stats["mean_loss"][num_val_runs-1] = np.array([exper.epoch_id, val_loss])
-            exper.logger.info("Model validation in epoch {}: current loss {:.3f}".format(exper.epoch_id, val_loss))
+            exper.val_stats["dice_coeff"][num_val_runs - 1] = np.array([exper.epoch_id, dice[0], dice[1]])
+            exper.logger.info("Model validation in epoch {}: current loss {:.3f}\t "
+                              "dice-coeff(myo/blood) {:.3f}/{:.3f}".format(exper.epoch_id, val_loss,
+                                                                           dice[0], dice[1]))
             dcnn_model.train()
 
         if exper.run_args.chkpnt and (exper.epoch_id % 100 == 0 or exper.epoch_id == exper.run_args.epochs):

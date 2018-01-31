@@ -1,2 +1,2 @@
-__all__ = ['dice_losses']
+__all__ = ['dice_metric.py']
 
