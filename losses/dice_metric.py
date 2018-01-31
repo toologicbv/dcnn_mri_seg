@@ -4,7 +4,7 @@ import torch
 import numpy as np
 from torch.autograd import Variable
 
-from sklearn.metrics import precision_recall_curve
+from sklearn.metrics import precision_recall_curve, f1_score
 
 # https://github.com/EKami/carvana-challenge/blob/master/src/nn/losses.py
 class SoftDiceLoss(nn.Module):
@@ -25,7 +25,7 @@ class SoftDiceLoss(nn.Module):
 
 
 # taken from torchbiomed package
-def dice_coeff(prediction, label):
+def dice_coeff(pred_scores, pred_labels, true_labels):
     """
     Compute the Dice aka F1-score
 
@@ -37,15 +37,17 @@ def dice_coeff(prediction, label):
     """
     np_preds = None
     np_labels = None
-    if not (isinstance(prediction, Variable) or isinstance(prediction, torch.FloatTensor)):
+    if not (isinstance(pred_scores, Variable) or isinstance(pred_scores, torch.FloatTensor)):
         raise TypeError('expected torch.autograd.Variable or torch.FloatTensor, but got: {}'
-                        .format(torch.typename(prediction)))
-    if isinstance(prediction, Variable):
-        np_preds = prediction.data.cpu().squeeze().numpy()
-        np_labels = label.data.cpu().squeeze().numpy()
+                        .format(torch.typename(pred_scores)))
+    if isinstance(pred_scores, Variable):
+        np_preds = pred_scores.data.cpu().squeeze().numpy()
+        np_true_labels = true_labels.data.cpu().squeeze().numpy()
+        np_pred_labels = pred_labels.data.cpu().squeeze().numpy()
 
     eps = 0.000001
-    precision, recall, thresholds = precision_recall_curve(np_labels, np_preds)
+    precision, recall, thresholds = precision_recall_curve(np_true_labels, np_preds)
+    dice = f1_score(np_true_labels, np_pred_labels)
     union = precision + recall + 2*eps
     intersect = precision * recall
     # make sure
@@ -60,4 +62,4 @@ def dice_coeff(prediction, label):
     # print('Dice at threshold 0.5 ' + str(dice_scores[np.argmin(abs(thresholds-0.5))]))
     dice_at_threshold = dice_scores[np.argmin(abs(thresholds-0.5))]
 
-    return dice_at_threshold
+    return dice_at_threshold, dice

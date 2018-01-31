@@ -475,15 +475,15 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
             classes = [HVSMR2016CardiacMRI.label_myocardium, HVSMR2016CardiacMRI.label_bloodpool]
 
         dices = []
-        for cls in classes:
-            pred_scores, pred_labels = predictions.max(1)
-            cls_labels = labels == cls
-            dices.append(dice_coeff(pred_scores.view(-1), cls_labels.view(-1)))
 
-        if len(dices) == 1:
-            return dices[0]
-        else:
-            return dices
+        for cls in classes:
+            pred_scores, pred_idx = predictions.max(1)
+            pred_cls_labels = pred_idx == cls
+            true_cls_labels = labels == cls
+            dice_curve, dice = dice_coeff(pred_scores.view(-1), pred_cls_labels.view(-1), true_cls_labels.view(-1))
+            dices.append(dice)
+
+        return dices
 
 
 # dataset = HVSMR2016CardiacMRI(data_dir="/home/jorg/repository/dcnn_mri_seg/data/HVSMR2016/",

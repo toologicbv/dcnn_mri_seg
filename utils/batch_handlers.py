@@ -135,11 +135,3 @@ class TestHandler(object):
         # iterate over the axial image slices
         for z in range(self.image.shape[2]):
             imslice = np.squeeze(aximage[:, :, z])
-            out = pred_fn((floatX(batch)))
-                # print(out.shape)
-                # print(out[0].shape)
-                for bi in range(bs):
-                    if (z + 1) - bs + bi < image.shape[2]:
-                        outs = np.squeeze(out[bi])
-                        outim[:, :, :, (z + 1) - bs + bi] += outs
-                        axi_outim[:, :, :, (z + 1) - bs + bi] += outs

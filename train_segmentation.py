@@ -72,7 +72,7 @@ def training(exper_hdl):
             exper_hdl.exper.val_stats["dice_coeff"][num_val_runs - 1] = np.array([exper_hdl.exper.epoch_id, dice[0],
                                                                                   dice[1]])
             exper_hdl.logger.info("Model validation in epoch {}: current loss {:.3f}\t "
-                              "dice-coeff(myo/blood) {:.3f}/{:.3f}".format(exper_hdl.exper.epoch_id, val_loss,
+                                  "dice-coeff(myo/blood) {:.3f}/{:.3f}".format(exper_hdl.exper.epoch_id, val_loss,
                                                                            dice[0], dice[1]))
             dcnn_model.train()
 
