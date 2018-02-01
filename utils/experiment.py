@@ -9,6 +9,7 @@ from common.parsing import create_def_argparser, run_dict
 
 from common.common import create_logger, create_exper_label
 from utils.config import config
+import models.dilated_cnn
 
 
 class ExperimentHandler(object):
@@ -18,7 +19,7 @@ class ExperimentHandler(object):
         self.exper = exper
         self.logger = None
         if logger is None:
-            self.logger = create_logger(self.exper, file_handler=True)
+            self.logger = create_logger(self.exper, file_handler=False)
         else:
             self.logger = logger
 
@@ -46,6 +47,30 @@ class ExperimentHandler(object):
 
         if self.exper.run_args.cuda:
             self.logger.info(" *** RUNNING ON GPU *** ")
+
+    def load_checkpoint(self, root_dir=None, checkpoint=None):
+
+        if root_dir is None:
+            root_dir = self.exper.config.root_dir
+
+        str_classname = "BaseDilated2DCNN"
+        checkpoint_file = str_classname + "checkpoint" + str(checkpoint).zfill(5) + ".pth.tar"
+        act_class = getattr(models.dilated_cnn, str_classname)
+        model = act_class(use_cuda=self.exper.run_args.cuda)
+        abs_checkpoint_dir = os.path.join(root_dir,
+                                          os.path.join( self.exper.chkpnt_dir, checkpoint_file))
+        if os.path.exists(abs_checkpoint_dir):
+            checkpoint = torch.load(abs_checkpoint_dir)
+            model.load_state_dict(checkpoint["state_dict"])
+            if self.exper.run_args.cuda:
+                print("Using GPU")
+                model.cuda()
+
+            self.logger.info("INFO - loaded existing model from checkpoint {}".format(abs_checkpoint_dir))
+        else:
+            raise IOError("Path to checkpoint not found {}".format(abs_checkpoint_dir))
+
+        return model
 
     @staticmethod
     def load_experiment(path_to_exp, full_path=False):

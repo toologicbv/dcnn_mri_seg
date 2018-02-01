@@ -1,5 +1,6 @@
 import abc
 import os
+import time
 import numpy as np
 import torch
 from torch.autograd import Variable
@@ -114,24 +115,133 @@ class TwoDimBatchHandler(BatchHandler):
 
 class TestHandler(object):
 
-    def __init__(self, image, is_cuda=False, num_of_classes=3):
+    def __init__(self, image, use_cuda=False, num_of_classes=3, batch_size=1):
         """
             Input is an image passed as 3D numpy array  [x, y, z] axis
             Currently assuming that image is already scaled to isotropic size of 0.65 mm in all dimensions
-            and that intensity values are normalized
+            and that intensity values are normalized.
+
+            We are currently assuming that the test-images are already a) normalized/scaled
 
         """
         self.image = image
-        self.cuda = is_cuda
+        self.use_cuda = use_cuda
         self.num_of_classes = num_of_classes
+        self.batch_size = batch_size
+        self.overlay_images = {}
+
+        if self.use_cuda:
+            self.cuda()
+
+    def cuda(self):
+        pass
 
     def __call__(self, exper_hdl, model):
-        outim = np.zeros((self.num_of_classes, self.image.shape[0], self.image.shape[1], self.image.shape[2]))
-        recp_fld = 2 * exper_hdl.exper.config.pad_size + 1
+
+        def get_slice_borders(dim_size):
+
+            chunks = dim_size / self.batch_size
+            rest = dim_size % self.batch_size
+            slices = [i * self.batch_size for i in np.arange(1, chunks + 1)]
+
+            if rest != 0:
+                slices.extend([slices[-1] + rest])
+
+            return slices
+
+        # first set model into eval-mode to save memory
+        model.eval()
+        # declare the final output image
+        print("INFO - Generating overlays for image with shape {}".format(str(self.image.shape)))
+        print("INFO - Start with generating slices for z-axis")
+        start_dt = time.time()
+        out_img = np.zeros((self.num_of_classes, self.image.shape[0], self.image.shape[1], self.image.shape[2]))
+        """
+            Start with the axial dimension (z-axis)
+        """
+        dim_size = self.image.shape[2]
+        slices = get_slice_borders(dim_size)
         aximage = np.pad(self.image,
                          ((exper_hdl.exper.config.pad_size, exper_hdl.exper.config.pad_size),
                           (exper_hdl.exper.config.pad_size, exper_hdl.exper.config.pad_size),
-                                 (0, 0)), 'constant', constant_values=(0,)).astype('float32')
-        # iterate over the axial image slices
-        for z in range(self.image.shape[2]):
-            imslice = np.squeeze(aximage[:, :, z])
+                          (0, 0)), 'constant', constant_values=(0,)).astype('float32')
+        start_slice = 0
+        for end_slice in slices:
+            batch = aximage[:, :, start_slice:end_slice]
+            batch = np.reshape(batch, (batch.shape[2], batch.shape[0], batch.shape[1]))
+            batch = np.expand_dims(batch, axis=1)
+            batch = Variable(torch.from_numpy(batch).float(), volatile=True)
+            if self.use_cuda:
+                batch = batch.cuda()
+            pred_score = model(batch)
+            pred_score = pred_score.data.cpu().numpy()
+            # pred_score tensor is [batch_size, num_classes, x-axis, y-axis] hence we need to reshape to
+            pred_score = np.reshape(pred_score, (pred_score.shape[1], pred_score.shape[2],
+                                                 pred_score.shape[3], pred_score.shape[0]))
+            out_img[:, :, :, start_slice:end_slice] = pred_score
+            start_slice = end_slice
+
+        del batch
+        del aximage
+        """
+            Followed by saggital dimension (x-axis)
+        """
+        print("INFO - Generating slices for x-axis")
+        dim_size = self.image.shape[0]
+        slices = get_slice_borders(dim_size)
+        sagimage = np.pad(self.image, ((0, 0),
+                                       (exper_hdl.exper.config.pad_size, exper_hdl.exper.config.pad_size),
+                                       (exper_hdl.exper.config.pad_size, exper_hdl.exper.config.pad_size)),
+                                        'constant', constant_values=(0,)).astype('float32')
+        start_slice = 0
+        for end_slice in slices:
+            batch = sagimage[start_slice:end_slice, :, :]
+            batch = np.expand_dims(batch, axis=1)
+            batch = Variable(torch.from_numpy(batch).float(), volatile=True)
+            if self.use_cuda:
+                batch = batch.cuda()
+            pred_score = model(batch)
+            pred_score = pred_score.data.cpu().numpy()
+            # pred_score tensor is [x-axis, num_classes, y-axis, z-axis] hence we need to reshape to
+            pred_score = np.reshape(pred_score, (pred_score.shape[1], pred_score.shape[0],
+                                                 pred_score.shape[2], pred_score.shape[3]))
+            out_img[:, start_slice:end_slice, :, :] += pred_score
+            start_slice = end_slice
+
+        """
+             Followed by coronal dimension (y-axis)
+        """
+        print("INFO - Generating slices for y-axis")
+        start_slice = 0
+        dim_size = self.image.shape[1]
+        corimage = np.pad(self.image, ((exper_hdl.exper.config.pad_size, exper_hdl.exper.config.pad_size), (0, 0),
+                                       (exper_hdl.exper.config.pad_size, exper_hdl.exper.config.pad_size)),
+                          'constant', constant_values=(0,)).astype('float32')
+        slices = get_slice_borders(dim_size)
+        for end_slice in slices:
+            batch = corimage[:, start_slice:end_slice, :]
+            batch = np.reshape(batch, (batch.shape[1], batch.shape[0], batch.shape[2]))
+            batch = np.expand_dims(batch, axis=1)
+            batch = Variable(torch.from_numpy(batch).float(), volatile=True)
+            if self.use_cuda:
+                batch = batch.cuda()
+            pred_score = model(batch)
+            pred_score = pred_score.data.cpu().numpy()
+            # pred_score tensor is [y-axis, num_classes, x-axis, z-axis] hence we need to reshape to
+            pred_score = np.reshape(pred_score, (pred_score.shape[1], pred_score.shape[2],
+                                                 pred_score.shape[0], pred_score.shape[3]))
+            out_img[:, :, start_slice:end_slice, :] += pred_score
+            start_slice = end_slice
+        # set model back into training mode
+        model.train()
+        del batch
+        del sagimage
+        abs_out_filename = os.path.join(exper_hdl.exper.output_dir, exper_hdl.exper.config.figure_path)
+        abs_out_filename = os.path.join(abs_out_filename, "test_myocardium.nii")
+        # average over the number of axis that we added to the final image
+        myocardium_img = out_img[1, :, :, :] * 1./3.
+        print(abs_out_filename)
+        write_numpy_to_image(myocardium_img, abs_out_filename, swap_axis=True)
+        total_time = time.time() - start_dt
+
+        print(out_img.shape)

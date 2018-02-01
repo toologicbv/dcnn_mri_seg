@@ -6,8 +6,9 @@ class Basic2DCNNBlock(nn.Module):
     expansion = 1
 
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=(1, 1), apply_batch_norm=False,
-                 prob_dropout=0., apply_non_linearity=False):
+                 prob_dropout=0., apply_non_linearity=False, verbose=False):
         super(Basic2DCNNBlock, self).__init__()
+        self.verbose = verbose
         self.conv_layer = nn.Conv2d(in_channels, out_channels, kernel_size, stride=stride, padding=padding,
                                     dilation=dilation, bias=True)
         self.apply_non_linearity = apply_non_linearity
@@ -18,13 +19,16 @@ class Basic2DCNNBlock(nn.Module):
             self.apply_dropout = False
 
         if self.apply_non_linearity:
-            print(">>> apply non linearity <<<")
+            if self.verbose:
+                print(">>> apply non linearity <<<")
             self.non_linearity = nn.ELU()
         if self.apply_batch_norm:
-            print(">>> apply batch-normalization <<<")
+            if self.verbose:
+                print(">>> apply batch-normalization <<<")
             self.bn = nn.BatchNorm2d(out_channels)
         if self.apply_dropout:
-            print(">>> apply dropout <<<")
+            if self.verbose:
+                print(">>> apply dropout <<<")
             self.layer_drop = nn.Dropout2d(p=prob_dropout)
 
         # self.reset_weights()

@@ -9,13 +9,17 @@ if "/home/jogi/.local/lib/python2.7/site-packages" in sys.path:
 import matplotlib.pyplot as plt
 from sklearn.model_selection import KFold
 
+from torch.autograd import Variable
+import torch
 from torch.utils.data import Dataset
 from utils.config import config
 from losses.dice_metric import dice_coeff
 
 
-def write_numpy_to_image(np_array, filename):
-    img = sitk.GetImageFromArray(np_array )
+def write_numpy_to_image(np_array, filename, swap_axis=False):
+    if swap_axis:
+        np_array = np.swapaxes(np_array, 0, 2)
+    img = sitk.GetImageFromArray(np_array)
     sitk.WriteImage(img, filename)
     print("Successfully saved image to {}".format(filename))
 
@@ -239,6 +243,7 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
 
     pixel_dta_type = 'float32'
     pad_size = config.pad_size
+    label_background = 0
     label_myocardium = 1
     label_bloodpool = 2
 
@@ -276,6 +281,8 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
         self.test_labels = []
         self.origins = []
         self.spacings = []
+        self.test_origins = []
+        self.test_spacings = []
         self.no_class = nclass
         self.class_count = np.zeros(self.no_class)
         self.val_image_indices =  self._prepare_cross_validation()
@@ -360,6 +367,7 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
                 val_set = True
             else:
                 val_set = False
+            # AUGMENT data and add to train, validation or test if applicable
             self._augment_data(mri_scan, label, pad_size=HVSMR2016CardiacMRI.pad_size, isval=val_set)
 
             files_loaded += 1
@@ -469,6 +477,38 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
         except IOError:
             raise IOError("Can't save {}".format(filename))
 
+    def get_test_image(self, swap_axis=True):
+        save_mode = self.mode
+        self.mode = "test"
+        img_files, label_files = self._get_file_lists()
+        for i, file_name in enumerate(img_files):
+            print("> > > Loading image+label from {}".format(file_name))
+            mri_scan, origin, spacing = self.load_func(file_name, data_type=HVSMR2016CardiacMRI.pixel_dta_type)
+            # the Nifty files from the challenge that Jelmer provided have (z,y,x) and hence z,x must be swapped
+            if swap_axis:
+                mri_scan = np.swapaxes(mri_scan, 0, 2)
+
+            if self.norm_scale == "normalize":
+                # print("> > > Info - Normalizing images intensity values")
+                mri_scan = normalize_image(mri_scan, axis=None)
+
+            elif self.norm_scale == "rescale":
+                mri_scan = rescale_image(mri_scan, axis=None)
+                # print("> > > Info - Rescaling images intensity values")
+            else:
+                # no rescaling or normalization
+                print("> > > Info - No rescaling or normalization applied to image!")
+            # add a front axis to the numpy array, will use that to concatenate the image slices
+            self.test_origins.append(origin)
+            self.test_spacings.append(spacing)
+            self.test_images.append(mri_scan)
+            label, _, _ = self.load_func(label_files[i])
+            if swap_axis:
+                label = np.swapaxes(label, 0, 2)
+            self.test_labels.append(label)
+
+        self.mode = save_mode
+
     @staticmethod
     def compute_accuracy(predictions, labels, classes=None):
         if classes is None:
@@ -485,6 +525,29 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
 
         return dices
 
+    @staticmethod
+    def get_pred_class_labels(predictions, classes=None):
+        """
+            predictions, autograd.Variable with dim [batch_size, num_of_classes, width, height]
+
+        :param predictions:
+        :param classes:
+        :return:
+        """
+        if classes is None:
+            classes = [HVSMR2016CardiacMRI.label_myocardium, HVSMR2016CardiacMRI.label_bloodpool]
+
+        pred_scores, pred_idx = predictions.max(1)
+        print("In method get_pred_class_labels, shape of input ", predictions.size())
+        overlays = np.zeros((len(classes) + 1), predictions.size(0), predictions.size(2), predictions.size(3))
+        for cls in classes:
+            pred_cls_labels = pred_idx == cls
+            if isinstance(pred_idx, Variable):
+                pred_cls_labels = pred_cls_labels.data.cpu().squeeze().numpy()
+            overlays[cls, :, :, :] = pred_cls_labels
+
+        return overlays
+
 
 # dataset = HVSMR2016CardiacMRI(data_dir="/home/jorg/repository/dcnn_mri_seg/data/HVSMR2016/",
 #                              search_mask=config.dflt_image_name + ".nii",
@@ -493,5 +556,7 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
 # dataset.save_to_numpy()
 # print("train set len {}".format(len(dataset.images)))
 # print("validation set len {}".format(len(dataset.val_images)))
+# dataset.get_test_image()
+# print("Length test set {}".format(len(dataset.test_images)))
 # del dataset
 

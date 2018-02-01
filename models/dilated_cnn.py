@@ -10,17 +10,19 @@ import os
 
 class BaseDilated2DCNN(nn.Module):
 
-    def __init__(self, architecture=DEFAULT_DCNN_2D, use_cuda=False):
+    def __init__(self, architecture=DEFAULT_DCNN_2D, use_cuda=False, verbose=False):
         super(BaseDilated2DCNN, self).__init__()
         self.architecture = architecture
         self.use_cuda = use_cuda
         self.num_conv_layers = self.architecture['num_of_layers']
+        self.verbose = verbose
         self.model = self._build_dcnn()
         # we're using CrossEntropyLoss. Implementation of PyTorch combines it with Softmax and hence
         # not need to incorporate Softmax layer in NN
         self.log_softmax = self.architecture['output'](dim=1)
         self.loss_function = self.architecture['loss_function']()
         self.test_function = nn.Softmax(dim=1)
+
         if self.use_cuda:
             self.cuda()
 
@@ -34,7 +36,8 @@ class BaseDilated2DCNN(nn.Module):
             else:
                 # get previous output channel size
                 in_channels = self.architecture['channels'][l - 1]
-            print("Constructing layer {}".format(l+1))
+            if self.verbose:
+                print("Constructing layer {}".format(l+1))
             layer_list.append(Basic2DCNNBlock(in_channels, self.architecture['channels'][l],
                                               self.architecture['kernels'][l],
                                               stride=self.architecture['stride'][l],
