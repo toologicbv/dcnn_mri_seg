@@ -240,8 +240,8 @@ class TestHandler(object):
         abs_out_filename = os.path.join(abs_out_filename, "test_myocardium.nii")
         # average over the number of axis that we added to the final image
         myocardium_img = out_img[1, :, :, :] * 1./3.
-        print(abs_out_filename)
+
         write_numpy_to_image(myocardium_img, abs_out_filename, swap_axis=True)
         total_time = time.time() - start_dt
-
+        print("INFO - Generating overlays took {:.3f} seconds ".format(total_time))
         print(out_img.shape)
