@@ -243,9 +243,9 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
 
     pixel_dta_type = 'float32'
     pad_size = config.pad_size
-    label_background = 0
-    label_myocardium = 1
-    label_bloodpool = 2
+    label_background = config.class_lbl_background
+    label_myocardium = config.class_lbl_myocardium
+    label_bloodpool = config.class_lbl_bloodpool
 
     def __init__(self, data_dir, search_mask=None, nclass=3, transform=False, conf_obj=None,
                  load_func=load_mhd_to_numpy, norm_scale="normalize", mode="train", load_type="raw",
@@ -528,22 +528,25 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
     @staticmethod
     def get_pred_class_labels(predictions, classes=None):
         """
-            predictions, autograd.Variable with dim [batch_size, num_of_classes, width, height]
+            predictions, autograd.Variable or numpy array with dim:
+             [batch_size, num_of_classes, width, height]
 
         :param predictions:
         :param classes:
         :return:
         """
+        # if PyTorch Variable, convert to numpy array
+        if isinstance(predictions, Variable):
+            predictions = predictions.data.cpu().squeeze().numpy()
+
         if classes is None:
             classes = [HVSMR2016CardiacMRI.label_myocardium, HVSMR2016CardiacMRI.label_bloodpool]
 
-        pred_scores, pred_idx = predictions.max(1)
-        print("In method get_pred_class_labels, shape of input ", predictions.size())
-        overlays = np.zeros((len(classes) + 1), predictions.size(0), predictions.size(2), predictions.size(3))
+        pred_idx = np.argmax(predictions, axis=1)
+        print("In method get_pred_class_labels, shape of input ", predictions.shape)
+        overlays = np.zeros((len(classes) + 1, predictions.shape[0], predictions.shape[2], predictions.shape[3]))
         for cls in classes:
             pred_cls_labels = pred_idx == cls
-            if isinstance(pred_idx, Variable):
-                pred_cls_labels = pred_cls_labels.data.cpu().squeeze().numpy()
             overlays[cls, :, :, :] = pred_cls_labels
 
         return overlays

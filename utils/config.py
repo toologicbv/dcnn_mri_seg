@@ -45,6 +45,14 @@ class BaseConfig(object):
         # padding to left and right of the image in order to reach the final image size for classification
         self.pad_size = 65
 
+        # class labels
+        self.class_lbl_background = 0
+        self.class_lbl_myocardium = 1
+        self.class_lbl_bloodpool = 2
+
+        # noise threshold
+        self.noise_threshold = 0.01
+
     def get_rootpath(self):
         return os.environ.get("REPO_PATH", os.environ.get('HOME'))
 

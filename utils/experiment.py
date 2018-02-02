@@ -23,6 +23,9 @@ class ExperimentHandler(object):
         else:
             self.logger = logger
 
+    def set_root_dir(self, root_dir):
+        self.exper.config.root_dir = root_dir
+
     def next_epoch(self):
         self.exper.epoch_id += 1
 
@@ -63,7 +66,6 @@ class ExperimentHandler(object):
             checkpoint = torch.load(abs_checkpoint_dir)
             model.load_state_dict(checkpoint["state_dict"])
             if self.exper.run_args.cuda:
-                print("Using GPU")
                 model.cuda()
 
             self.logger.info("INFO - loaded existing model from checkpoint {}".format(abs_checkpoint_dir))

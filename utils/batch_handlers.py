@@ -5,6 +5,7 @@ import numpy as np
 import torch
 from torch.autograd import Variable
 from in_out.load_data import write_numpy_to_image
+from in_out.load_data import HVSMR2016CardiacMRI
 
 
 class BatchHandler(object):
@@ -236,12 +237,20 @@ class TestHandler(object):
         model.train()
         del batch
         del sagimage
+        # attenuate noise
+        out_img[out_img <= exper_hdl.exper.config.noise_threshold] = 0.
+        #
+        # sharp_overlays = HVSMR2016CardiacMRI.get_pred_class_labels(out_img & 1./3.)
+        # Save the overlays for myocardium & bloodpool
         abs_out_filename = os.path.join(exper_hdl.exper.output_dir, exper_hdl.exper.config.figure_path)
-        abs_out_filename = os.path.join(abs_out_filename, "test_myocardium.nii")
+        myo_filename = os.path.join(abs_out_filename, "test_myocardium.nii")
         # average over the number of axis that we added to the final image
-        myocardium_img = out_img[1, :, :, :] * 1./3.
+        myocardium_img = out_img[exper_hdl.exper.config.class_lbl_myocardium, :, :, :] * 1./3.
+        write_numpy_to_image(myocardium_img, myo_filename, swap_axis=True)
 
-        write_numpy_to_image(myocardium_img, abs_out_filename, swap_axis=True)
+        bloodpool_filename = os.path.join(abs_out_filename, "test_bloodpool.nii")
+        # average over the number of axis that we added to the final image
+        bloodpool_img = out_img[exper_hdl.exper.config.class_lbl_bloodpool, :, :, :] * 1. / 3.
+        write_numpy_to_image(bloodpool_img, bloodpool_filename, swap_axis=True)
         total_time = time.time() - start_dt
         print("INFO - Generating overlays took {:.3f} seconds ".format(total_time))
-        print(out_img.shape)
