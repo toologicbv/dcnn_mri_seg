@@ -53,6 +53,11 @@ class BaseConfig(object):
         # noise threshold
         self.noise_threshold = 0.01
 
+    def copy_from_object(self, obj):
+
+        for key, value in obj.__dict__.iteritems():
+            self.__dict__[key] = value
+
     def get_rootpath(self):
         return os.environ.get("REPO_PATH", os.environ.get('HOME'))
 

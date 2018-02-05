@@ -16,11 +16,13 @@ from utils.config import config
 from losses.dice_metric import dice_coeff
 
 
-def write_numpy_to_image(np_array, filename, swap_axis=False):
+def write_numpy_to_image(np_array, filename, swap_axis=False, spacing=None):
 
     if swap_axis:
         np_array = np.swapaxes(np_array, 0, 2)
     img = sitk.GetImageFromArray(np_array)
+    if spacing is not None:
+        img.SetSpacing(spacing)
     sitk.WriteImage(img, filename)
     print("Successfully saved image to {}".format(filename))
 
@@ -550,10 +552,15 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
         return dices
 
     @staticmethod
-    def get_pred_class_labels(predictions, classes=None):
+    def get_pred_class_labels(predictions, classes=None, axis=1):
         """
             predictions, autograd.Variable or numpy array with dim:
              [batch_size, num_of_classes, width, height]
+
+            The parameter "axis" specifies the axis over which we take the maximum in order to determine
+            the segmentation class. The method only supports axis-values 0 and 1.
+
+            Important: the return object "overlays" has dimension [num_of_classes, batch_size, width, height]
 
         :param predictions:
         :param classes:
@@ -566,9 +573,18 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
         if classes is None:
             classes = [HVSMR2016CardiacMRI.label_myocardium, HVSMR2016CardiacMRI.label_bloodpool]
 
-        pred_idx = np.argmax(predictions, axis=1)
+        pred_idx = np.argmax(predictions, axis=axis)
+        print(np.unique(pred_idx))
         print("In method get_pred_class_labels, shape of input ", predictions.shape)
-        overlays = np.zeros((len(classes) + 1, predictions.shape[0], predictions.shape[2], predictions.shape[3]))
+        if axis == 1:
+            overlays = np.zeros((len(classes) + 1, predictions.shape[0], predictions.shape[2],
+                                 predictions.shape[3]))
+        elif axis == 0:
+            overlays = np.zeros((len(classes) + 1, predictions.shape[1], predictions.shape[2],
+                                 predictions.shape[3]))
+        else:
+            raise ValueError("axis value {} is not supported".format(axis))
+
         for cls in classes:
             pred_cls_labels = pred_idx == cls
             overlays[cls, :, :, :] = pred_cls_labels
