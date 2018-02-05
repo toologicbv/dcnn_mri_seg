@@ -5,6 +5,7 @@ import numpy as np
 from torch.autograd import Variable
 
 from sklearn.metrics import precision_recall_curve, f1_score
+from sklearn.metrics.classification import UndefinedMetricWarning
 
 # https://github.com/EKami/carvana-challenge/blob/master/src/nn/losses.py
 class SoftDiceLoss(nn.Module):
@@ -46,8 +47,20 @@ def dice_coeff(pred_scores, pred_labels, true_labels):
         np_pred_labels = pred_labels.data.cpu().squeeze().numpy()
 
     eps = 0.000001
+    dice = 0.
     # precision, recall, thresholds = precision_recall_curve(np_true_labels, np_preds)
-    dice = f1_score(np_true_labels, np_pred_labels)
+    if np.all(np_true_labels == 0):
+        # print(np.sum(np_pred_labels == 1))
+        if np.all(np_pred_labels == 0):
+            dice = 1.
+    if dice != 1.:
+        try:
+            dice = f1_score(np_true_labels, np_pred_labels)
+        except UndefinedMetricWarning:
+            print("WARNING - No true positives (TP) in image slice")
+        except:
+            print("Some unknown error occurred")
+
     # union = precision + recall + 2*eps
     # intersect = precision * recall
     # make sure

@@ -1,5 +1,6 @@
 import sys
 import torch
+from torch.autograd import Variable
 import numpy as np
 import os
 from datetime import datetime
@@ -9,6 +10,8 @@ from common.parsing import create_def_argparser, run_dict
 
 from common.common import create_logger, create_exper_label
 from utils.config import config
+from utils.batch_handlers import TwoDimBatchHandler, TestHandler
+from in_out.load_data import HVSMR2016CardiacMRI
 import models.dilated_cnn
 
 
@@ -73,6 +76,40 @@ class ExperimentHandler(object):
             raise IOError("Path to checkpoint not found {}".format(abs_checkpoint_dir))
 
         return model
+
+    def set_config_object(self, new_config):
+        self.exper.config = new_config
+
+    def eval(self, images, labels, model, batch_size=None, val_run_id=None):
+
+        # validate model
+        val_batch = TwoDimBatchHandler(self.exper, batch_size=batch_size)
+        val_batch.generate_batch_2d(images, labels)
+        model.eval()
+        b_predictions = model(val_batch.b_images)
+        val_loss = model.get_loss(b_predictions, val_batch.b_labels)
+        val_loss = val_loss.data.cpu().squeeze().numpy()[0]
+        # compute dice score for both classes (myocardium and bloodpool)
+        dice = HVSMR2016CardiacMRI.compute_accuracy(b_predictions, val_batch.b_labels)
+        # store epochID and validation loss
+        if val_run_id is not None:
+            self.exper.val_stats["mean_loss"][val_run_id - 1] = np.array([self.exper.epoch_id, val_loss])
+            self.exper.val_stats["dice_coeff"][val_run_id - 1] = np.array([self.exper.epoch_id, dice[0], dice[1]])
+        self.logger.info("Model validation in epoch {}: current loss {:.3f}\t "
+                         "dice-coeff(myo/blood) {:.3f}/{:.3f}".format(self.exper.epoch_id, val_loss,
+                                                                      dice[0], dice[1]))
+        model.train()
+        del val_batch
+
+    def test_full_image(self, model, images, labels=None, batch_size=None, view="axial"):
+
+        test_hdl = TestHandler(images, labels=labels, use_cuda=self.exper.run_args.cuda, batch_size=batch_size)
+        test_hdl.generate_3D_batches(s_axis=view)
+
+        model.eval()
+        test_hdl(model, self)
+
+        model.train()
 
     @staticmethod
     def load_experiment(path_to_exp, full_path=False):

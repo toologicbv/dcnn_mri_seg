@@ -34,8 +34,12 @@ class TwoDimBatchHandler(BatchHandler):
     patch_size = 70
     pixel_dta_type = "float32"
 
-    def __init__(self, exper, is_train=True, num_classes=3):
-        self.batch_size = exper.run_args.batch_size
+    def __init__(self, exper, is_train=True, batch_size=None, num_classes=3):
+        if batch_size is None:
+            self.batch_size = exper.run_args.batch_size
+        else:
+            self.batch_size = batch_size
+
         self.is_train = is_train
         self.num_classes = num_classes
         self.ps_wp = TwoDimBatchHandler.patch_size_with_padding
@@ -53,7 +57,8 @@ class TwoDimBatchHandler(BatchHandler):
     def cuda(self):
         self.b_images = self.b_images.cuda()
         self.b_labels = self.b_labels.cuda()
-        self.b_labels_per_class = self.b_labels_per_class.cuda()
+        if self.b_labels_per_class is not None:
+            self.b_labels_per_class = self.b_labels_per_class.cuda()
 
     def __call__(self, exper, network):
         print("Batch size {}".format(exper.run_args.batch_size))
@@ -116,7 +121,7 @@ class TwoDimBatchHandler(BatchHandler):
 
 class TestHandler(object):
 
-    def __init__(self, image, use_cuda=False, num_of_classes=3, batch_size=1):
+    def __init__(self, image, use_cuda=False, num_of_classes=3, batch_size=1, labels=None, ):
         """
             Input is an image passed as 3D numpy array  [x, y, z] axis
             Currently assuming that image is already scaled to isotropic size of 0.65 mm in all dimensions
@@ -125,19 +130,147 @@ class TestHandler(object):
             We are currently assuming that the test-images are already a) normalized/scaled
 
         """
+        self.b_images = []
+        self.b_labels = []
         self.image = image
+        self.labels = labels
+        self.view = None
+        if labels is None:
+            self.no_labels = True
+        else:
+            self.no_labels = False
+        self.num_classes = num_of_classes
         self.use_cuda = use_cuda
-        self.num_of_classes = num_of_classes
         self.batch_size = batch_size
-        self.overlay_images = {}
+        self.out_img = np.zeros((self.num_classes, self.image.shape[0], self.image.shape[1], self.image.shape[2]))
+        self.overlay_images = {'myocardium': np.zeros((self.image.shape[0], self.image.shape[1], self.image.shape[2])),
+                               'bloodpool': np.zeros((self.image.shape[0], self.image.shape[1], self.image.shape[2]))}
 
-        if self.use_cuda:
-            self.cuda()
+    def __call__(self, model, exper_hdl):
 
-    def cuda(self):
-        pass
+        np_pred = []
+        for b, b_image in enumerate(self.b_images):
+            b_image = Variable(torch.from_numpy(b_image).float(), volatile=True)
+            if not self.no_labels:
+                b_labels = Variable(torch.from_numpy(self.b_labels[b].astype(int)), volatile=True)
+            if exper_hdl.exper.run_args.cuda:
+                b_image = b_image.cuda()
+                if not self.no_labels:
+                    b_labels = b_labels.cuda()
 
-    def __call__(self, exper_hdl, model):
+            b_predictions = model(b_image)
+            np_pred.append(b_predictions.data.cpu().numpy())
+            if not self.no_labels:
+                val_loss = model.get_loss(b_predictions, b_labels)
+                val_loss = val_loss.data.cpu().squeeze().numpy()[0]
+                # compute dice score for both classes (myocardium and bloodpool)
+                dice = HVSMR2016CardiacMRI.compute_accuracy(b_predictions, b_labels)
+                exper_hdl.logger.info("Model testing: current loss {:.3f}\t "
+                                      "dice-coeff(myo/blood) {:.3f}/{:.3f}".format(val_loss,
+                                                                              dice[0], dice[1]))
+        np_image = np.concatenate(np_pred, axis=0)
+        print("Image out ", np_image.shape)
+        for i in np.arange(np_image.shape[0]):
+            if self.view == "axial":
+            self.out_img[:, :, :, i] += np_image[i, :, :, :]
+
+    def generate_3D_batches(self, s_axis="axial"):
+        """
+        Assuming image is in [x, y, z] sequence
+
+        """
+        self.view = s_axis
+        shape_labels = None
+        if s_axis == 'axial':
+            # z-axis
+            iter_axis = 2
+            shape_images = tuple((self.batch_size, 1, self.image.shape[0] + (2 * HVSMR2016CardiacMRI.pad_size),
+                                  self.image.shape[1] + (2 * HVSMR2016CardiacMRI.pad_size)))
+
+            if not self.no_labels:
+                shape_labels = tuple((self.batch_size, 1, self.labels.shape[0], self.labels.shape[1]))
+            pad_image = np.pad(self.image, ((HVSMR2016CardiacMRI.pad_size, HVSMR2016CardiacMRI.pad_size),
+                                       (HVSMR2016CardiacMRI.pad_size, HVSMR2016CardiacMRI.pad_size), (0, 0)),
+                               'constant', constant_values=(0,)).astype(HVSMR2016CardiacMRI.pixel_dta_type)
+        elif s_axis == "saggital":
+            # x-axis
+            iter_axis = 0
+            shape_images = tuple((self.batch_size, 1, self.image.shape[1] + (2 * HVSMR2016CardiacMRI.pad_size),
+                                  self.image.shape[2] + (2 * HVSMR2016CardiacMRI.pad_size)))
+            if not self.no_labels:
+                shape_labels = tuple((self.batch_size, 1, self.labels.shape[1], self.labels.shape[2]))
+            pad_image = np.pad(self.image, ((0, 0),
+                                       (HVSMR2016CardiacMRI.pad_size, HVSMR2016CardiacMRI.pad_size),
+                                       (HVSMR2016CardiacMRI.pad_size, HVSMR2016CardiacMRI.pad_size)),
+                               'constant', constant_values=(0,)).astype(HVSMR2016CardiacMRI.pixel_dta_type)
+        elif s_axis == "coronal":
+            # y-axis
+            iter_axis = 1
+            shape_images = tuple((self.batch_size, 1, self.image.shape[0] + (2 * HVSMR2016CardiacMRI.pad_size),
+                                  self.image.shape[2] + (2 * HVSMR2016CardiacMRI.pad_size)))
+            if not self.no_labels:
+                shape_labels = tuple((self.batch_size, 1, self.labels.shape[0], self.labels.shape[2]))
+            pad_image = np.pad(self.image, ((HVSMR2016CardiacMRI.pad_size, HVSMR2016CardiacMRI.pad_size),
+                                       (0, 0), (HVSMR2016CardiacMRI.pad_size, HVSMR2016CardiacMRI.pad_size)),
+                               'constant', constant_values=(0,)).astype(HVSMR2016CardiacMRI.pixel_dta_type)
+        else:
+            raise ValueError("Only axial/saggital/coronal view are supported for parameter s_axis "
+                             "use passed {}".format(s_axis))
+
+        def get_slice_borders(dim_size):
+
+            chunks = dim_size / self.batch_size
+            rest = dim_size % self.batch_size
+            slices = [i * self.batch_size for i in np.arange(1, chunks + 1)]
+
+            if rest != 0:
+                slices.extend([slices[-1] + rest])
+
+            return slices
+
+        if self.image.shape[iter_axis] - self.batch_size < 0:
+            # we can process all x-axis slices in one batch
+            slices = [self.image.shape[iter_axis]]
+            self.batch_size = self.image.shape[iter_axis]
+        else:
+            slices = get_slice_borders(self.image.shape[iter_axis])
+
+        start_slice = 0
+        print(self.image.shape, pad_image.shape, shape_images, shape_labels)
+
+        for end_slice in slices:
+            if (end_slice - start_slice) != self.batch_size:
+                shape_images = tuple((end_slice - start_slice, shape_images[1], shape_images[2], shape_images[3]))
+                if not self.no_labels:
+                    shape_labels = tuple((end_slice - start_slice, shape_labels[1], shape_labels[2], shape_labels[3]))
+            b_images = np.zeros(shape_images)
+            b_labels = np.zeros(shape_labels)
+            # print("Start slice/end slice ", start_slice, end_slice)
+            for i in np.arange(end_slice - start_slice):
+
+                # print("begin/end ", start_slice+i, end_slice)
+                if iter_axis == 0:
+                    b_images[i, 0, :, :] = pad_image[start_slice+i, :, :]
+                    if not self.no_labels:
+                        b_labels[i, 0, :, :] = self.labels[start_slice+i, :, :]
+                if iter_axis == 1:
+                    b_images[i, 0, :, :] = pad_image[:, start_slice+i, :]
+                    if not self.no_labels:
+                        b_labels[i, 0, :, :] = self.labels[:, start_slice+i, :]
+                if iter_axis == 2:
+                    b_images[i, 0, :, :] = pad_image[:, :, start_slice+i]
+                    if not self.no_labels:
+                        b_labels[i, 0, :, :] = self.labels[:, :, start_slice+i]
+
+            self.b_images.append(b_images)
+            if not self.no_labels:
+                self.b_labels.append(b_labels)
+            start_slice = end_slice
+
+        del b_images
+        del b_labels
+
+    def call(self, exper_hdl, model):
 
         def get_slice_borders(dim_size):
 
@@ -175,6 +308,13 @@ class TestHandler(object):
             if self.use_cuda:
                 batch = batch.cuda()
             pred_score = model(batch)
+            if self.calculate_dice:
+                batch_labels = self.labels[:, :, start_slice:end_slice]
+                batch_labels = np.reshape(batch_labels, (batch_labels.shape[2], batch_labels.shape[0],
+                                                         batch_labels.shape[1]))
+                dice = HVSMR2016CardiacMRI.compute_accuracy(pred_score, batch_labels)
+                print(pred_score.size(), batch_labels.shape)
+                print("Dice scores {:.3f} / {:.3f}".format(dice[0], dice[1]))
             pred_score = pred_score.data.cpu().numpy()
             # pred_score tensor is [batch_size, num_classes, x-axis, y-axis] hence we need to reshape to
             pred_score = np.reshape(pred_score, (pred_score.shape[1], pred_score.shape[2],
@@ -184,6 +324,7 @@ class TestHandler(object):
 
         del batch
         del aximage
+        exit(1)
         """
             Followed by saggital dimension (x-axis)
         """
@@ -238,11 +379,19 @@ class TestHandler(object):
         del batch
         del sagimage
         # attenuate noise
-        out_img[out_img <= exper_hdl.exper.config.noise_threshold] = 0.
+        if hasattr(exper_hdl.exper.config, 'noise_threshold'):
+            out_img[out_img <= exper_hdl.exper.config.noise_threshold] = 0.
+        else:
+            out_img[out_img <= 0.01] = 0.
         #
         # sharp_overlays = HVSMR2016CardiacMRI.get_pred_class_labels(out_img & 1./3.)
         # Save the overlays for myocardium & bloodpool
-        abs_out_filename = os.path.join(exper_hdl.exper.output_dir, exper_hdl.exper.config.figure_path)
+        abs_out_filename = os.path.join(exper_hdl.exper.config.root_dir,
+                                        os.path.join(exper_hdl.exper.output_dir, exper_hdl.exper.config.figure_path))
+        if not os.path.exists(abs_out_filename):
+            print("Output path does not exist {}".format(abs_out_filename))
+            abs_out_filename = os.environ.get('HOME')
+            print("Using {} instead".format(abs_out_filename))
         myo_filename = os.path.join(abs_out_filename, "test_myocardium.nii")
         # average over the number of axis that we added to the final image
         myocardium_img = out_img[exper_hdl.exper.config.class_lbl_myocardium, :, :, :] * 1./3.
@@ -254,3 +403,4 @@ class TestHandler(object):
         write_numpy_to_image(bloodpool_img, bloodpool_filename, swap_axis=True)
         total_time = time.time() - start_dt
         print("INFO - Generating overlays took {:.3f} seconds ".format(total_time))
+        # test the deployment

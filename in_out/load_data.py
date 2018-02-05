@@ -17,6 +17,7 @@ from losses.dice_metric import dice_coeff
 
 
 def write_numpy_to_image(np_array, filename, swap_axis=False):
+
     if swap_axis:
         np_array = np.swapaxes(np_array, 0, 2)
     img = sitk.GetImageFromArray(np_array)
@@ -509,10 +510,33 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
 
         self.mode = save_mode
 
+    def create_test_slices(self):
+        test_img_slices, test_lbl_slices = [], []
+
+        for i in np.arange(len(self.test_images)):
+            image = np.pad(self.test_images[i], ((0, 0),
+                                                 (HVSMR2016CardiacMRI.pad_size, HVSMR2016CardiacMRI.pad_size),
+                                                 (HVSMR2016CardiacMRI.pad_size, HVSMR2016CardiacMRI.pad_size)),
+                           'constant', constant_values=(0,)).astype(HVSMR2016CardiacMRI.pixel_dta_type)
+            for x in np.arange(self.test_images[i].shape[0]):
+                slice_padded = image[x, :, :]
+                lbl_slice = self.test_labels[i][x, :, :]
+                # slice_padded = np.pad(img_slice, HVSMR2016CardiacMRI.pad_size, 'constant', constant_values=(0,)).astype(
+                #    HVSMR2016CardiacMRI.pixel_dta_type)
+                test_img_slices.append(slice_padded)
+                test_lbl_slices.append(lbl_slice)
+
+        return test_img_slices, test_lbl_slices
+
     @staticmethod
     def compute_accuracy(predictions, labels, classes=None):
         if classes is None:
             classes = [HVSMR2016CardiacMRI.label_myocardium, HVSMR2016CardiacMRI.label_bloodpool]
+
+        if isinstance(predictions, np.ndarray):
+            predictions = Variable(torch.from_numpy(predictions).float())
+        if isinstance(labels, np.ndarray):
+            labels = Variable(torch.from_numpy(labels).float())
 
         dices = []
 
