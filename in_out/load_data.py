@@ -574,8 +574,8 @@ class HVSMR2016CardiacMRI(BaseImageDataSet):
             classes = [HVSMR2016CardiacMRI.label_myocardium, HVSMR2016CardiacMRI.label_bloodpool]
 
         pred_idx = np.argmax(predictions, axis=axis)
-        print(np.unique(pred_idx))
-        print("In method get_pred_class_labels, shape of input ", predictions.shape)
+
+        # print("In method get_pred_class_labels, shape of input ", predictions.shape)
         if axis == 1:
             overlays = np.zeros((len(classes) + 1, predictions.shape[0], predictions.shape[2],
                                  predictions.shape[3]))
